@@ -3,9 +3,9 @@ spring:
     name: docfy-backend
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/docfy}
-    username: ${DB_USER:docfy}
-    password: ${DB_PASSWORD:docfy_local}
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
 
   jpa:
     hibernate:

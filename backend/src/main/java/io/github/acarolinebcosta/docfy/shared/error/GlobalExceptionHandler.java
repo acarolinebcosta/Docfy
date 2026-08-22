@@ -1,6 +1,7 @@
 package io.github.acarolinebcosta.docfy.shared.error;
 
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
+import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,9 +22,9 @@ public class GlobalExceptionHandler {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(IllegalArgumentException.class)
+    @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiErrorResponse> handleBadRequest(
-            IllegalArgumentException exception,
+            BadRequestException exception,
             HttpServletRequest request
     ) {
         String correlationId = getCorrelationId();

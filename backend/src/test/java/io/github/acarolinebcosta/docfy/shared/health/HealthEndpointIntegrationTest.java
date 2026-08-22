@@ -1,6 +1,7 @@
 package io.github.acarolinebcosta.docfy.shared.health;
 
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
+import io.github.acarolinebcosta.docfy.support.PostgresTestContainer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -19,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
 )
-class HealthEndpointIntegrationTest {
+class HealthEndpointIntegrationTest implements PostgresTestContainer {
 
     @LocalServerPort
     private int port;

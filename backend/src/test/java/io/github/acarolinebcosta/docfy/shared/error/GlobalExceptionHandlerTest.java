@@ -1,6 +1,7 @@
 package io.github.acarolinebcosta.docfy.shared.error;
 
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
+import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
@@ -35,8 +36,8 @@ class GlobalExceptionHandlerTest {
 
         request.setRequestURI("/api/v1/documents");
 
-        IllegalArgumentException exception =
-                new IllegalArgumentException("Invalid request");
+        BadRequestException exception =
+            new BadRequestException("Invalid request");
 
         ResponseEntity<ApiErrorResponse> response =
                 handler.handleBadRequest(
