@@ -1,0 +1,2 @@
+-- Docfy initial database baseline.
+-- Domain tables will be introduced through versioned migrations.
