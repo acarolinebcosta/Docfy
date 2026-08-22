@@ -1,15 +1,21 @@
 # Docfy — Architecture
 
-The technical architecture of Docfy will be documented after the initial product requirements, business rules and quality attributes are established.
+This directory contains the technical architecture documentation for Docfy.
 
-This section will cover:
+## Documents
 
-- system architecture;
-- frontend architecture;
-- backend architecture;
-- database;
-- API design;
-- authentication and authorization;
-- observability;
+- [System Architecture](system-architecture.md)
+
+## Architecture Principles
+
+Docfy architecture aims to balance:
+
+- simplicity;
+- maintainability;
 - testability;
-- architectural decisions.
+- observability;
+- reliability;
+- security;
+- product evolution.
+
+Architectural decisions should remain connected to product requirements and identified quality risks.

@@ -34,6 +34,7 @@ The initial product requirements, business rules and quality principles are bein
 - [Quality Principles](docs/quality/quality-principles.md)
 - [Initial Quality Risk Assessment](docs/quality/initial-risk-assessment.md)
 - [Test Strategy](docs/quality/test-strategy.md)
+- [System Architecture](docs/architecture/system-architecture.md)
 
 ## Origin
 
