@@ -2,6 +2,7 @@ package io.github.acarolinebcosta.docfy.shared.web;
 
 import io.github.acarolinebcosta.docfy.shared.error.GlobalExceptionHandler;
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
+import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -139,13 +140,36 @@ void shouldReturnUnsupportedMediaTypeWithCorrelationId() throws Exception {
             .andExpect(jsonPath("$.path").value("/test/json-only"))
             .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID));
 }
+@Test
+void shouldTreatUnexpectedIllegalArgumentAsInternalServerError() throws Exception {
+    mockMvc.perform(
+                    get("/test/unexpected-illegal-argument")
+                            .header(
+                                    CorrelationIdFilter.HEADER_NAME,
+                                    CORRELATION_ID
+                            )
+            )
+            .andExpect(status().isInternalServerError())
+            .andExpect(jsonPath("$.timestamp").exists())
+            .andExpect(jsonPath("$.status").value(500))
+            .andExpect(jsonPath("$.error").value("INTERNAL_SERVER_ERROR"))
+            .andExpect(
+                    jsonPath("$.message")
+                            .value("Unexpected internal server error")
+            )
+            .andExpect(
+                    jsonPath("$.path")
+                            .value("/test/unexpected-illegal-argument")
+            )
+            .andExpect(jsonPath("$.correlationId").value(CORRELATION_ID));
+}
 
     @RestController
     static class TestController {
 
         @GetMapping("/test/bad-request")
         void badRequest() {
-            throw new IllegalArgumentException("Invalid request");
+            throw new BadRequestException("Invalid request");
         }
 
         @GetMapping("/test/internal-error")
@@ -161,6 +185,12 @@ void shouldReturnUnsupportedMediaTypeWithCorrelationId() throws Exception {
                 consumes = MediaType.APPLICATION_JSON_VALUE
         )
         void jsonOnly() {
+        }
+        @GetMapping("/test/unexpected-illegal-argument")
+        void unexpectedIllegalArgument() {
+        throw new IllegalArgumentException(
+                "Sensitive internal implementation detail"
+        );
         }
     }
 }
