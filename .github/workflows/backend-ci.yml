@@ -44,4 +44,6 @@ jobs:
         run: java -version
 
       - name: Run backend tests
-        run: ./mvnw --batch-mode test
+        run: |
+          export JWT_SECRET="$(openssl rand -hex 32)"
+          ./mvnw --batch-mode test

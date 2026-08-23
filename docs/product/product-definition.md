@@ -149,14 +149,12 @@ Initial lifecycle:
 ```text
 DRAFT
   ↓
-IN REVIEW
-  ↓
- ┌───────────────┐
- ↓               ↓
-APPROVED       REJECTED
- ↓               ↓
-ARCHIVED        DRAFT
+IN_REVIEW
+  ├── approve → APPROVED → ARCHIVED
+  └── reject  → DRAFT
 ```
+
+Rejection returns the document directly to `DRAFT`; it does not create a separate persisted state.
 
 ### Authorization
 
@@ -223,7 +221,7 @@ Managers and Administrators must be able to approve documents under review.
 
 ### FR-007 — Document Rejection
 
-Managers and Administrators must be able to reject documents under review.
+Managers and Administrators must be able to reject documents under review, returning them to `DRAFT`.
 
 ### FR-008 — Document Archive
 
@@ -277,7 +275,7 @@ Only documents in `DRAFT` status can be submitted for review.
 
 ### BR-006 — Approval State
 
-Only documents in `IN REVIEW` status can be approved or rejected.
+Only documents in `IN_REVIEW` status can be approved or rejected.
 
 ### BR-007 — Archive State
 

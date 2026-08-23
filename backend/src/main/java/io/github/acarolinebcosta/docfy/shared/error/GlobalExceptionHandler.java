@@ -1,7 +1,8 @@
 package io.github.acarolinebcosta.docfy.shared.error;
 
-import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
+import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
+import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -38,6 +40,48 @@ public class GlobalExceptionHandler {
 
         return buildResponseEntity(
                 HttpStatus.BAD_REQUEST,
+                exception.getMessage(),
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiErrorResponse> handleValidationException(
+            MethodArgumentNotValidException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Request validation failed. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.BAD_REQUEST,
+                "Invalid request",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthenticationException(
+            AuthenticationException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Authentication failed. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.UNAUTHORIZED,
                 exception.getMessage(),
                 request.getRequestURI(),
                 correlationId

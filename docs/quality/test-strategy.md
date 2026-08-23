@@ -616,9 +616,8 @@ Data should cover combinations such as:
 - valid credentials;
 - invalid credentials;
 - DRAFT documents;
-- IN REVIEW documents;
+- IN_REVIEW documents;
 - APPROVED documents;
-- REJECTED documents;
 - ARCHIVED documents;
 - different categories;
 - different permission combinations;

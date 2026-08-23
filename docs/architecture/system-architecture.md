@@ -504,15 +504,11 @@ Initial document lifecycle:
 DRAFT
   ↓
 IN_REVIEW
-  ↓
-┌───────────────────┐
-│                   │
-▼                   ▼
-APPROVED          REJECTED
-  │                   │
-  ▼                   ▼
-ARCHIVED             DRAFT
+  ├── approve → APPROVED → ARCHIVED
+  └── reject  → DRAFT
 ```
+
+Rejection returns the document directly to `DRAFT`; it does not create a separate persisted state.
 
 The backend domain layer must enforce valid transitions.
 
@@ -541,6 +537,12 @@ IN_REVIEW → APPROVED
 ```
 
 may succeed when the authenticated user has the required permission.
+
+```text
+IN_REVIEW → DRAFT
+```
+
+may succeed when an authenticated user with the required permission rejects the document.
 
 State validation should occur in the domain or application layer rather than only in the UI.
 
