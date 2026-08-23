@@ -24,3 +24,10 @@ management:
   endpoint:
     health:
       show-details: never
+
+docfy:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      issuer: ${JWT_ISSUER:docfy}
+      expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
