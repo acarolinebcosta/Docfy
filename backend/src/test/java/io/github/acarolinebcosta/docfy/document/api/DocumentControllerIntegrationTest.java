@@ -5,12 +5,17 @@ import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.auth.domain.UserRepository;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentRepository;
+import io.github.acarolinebcosta.docfy.document.domain.DocumentStatus;
 import io.github.acarolinebcosta.docfy.support.PostgresTestContainer;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -50,6 +55,12 @@ class DocumentControllerIntegrationTest
 
     @Autowired
     private JwtEncoder jwtEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void shouldCreateDraftDocumentForAuthenticatedUser()
@@ -278,6 +289,82 @@ class DocumentControllerIntegrationTest
     }
 
     @Test
+    void shouldAllowAdminToReadAnotherUsersDraft()
+            throws Exception {
+        User admin = createUser("get-admin", Role.ADMIN);
+        User owner = createUser("get-admin-owner", Role.COLLABORATOR);
+        Document document = createDocument(
+                "Admin visible draft",
+                owner,
+                DocumentStatus.DRAFT
+        );
+
+        expectVisibleDocument(document, admin);
+    }
+
+    @Test
+    void shouldAllowManagerToReadAnotherUsersDraft()
+            throws Exception {
+        User manager = createUser("get-manager", Role.MANAGER);
+        User owner = createUser(
+                "get-manager-owner",
+                Role.COLLABORATOR
+        );
+        Document document = createDocument(
+                "Manager visible draft",
+                owner,
+                DocumentStatus.DRAFT
+        );
+
+        expectVisibleDocument(document, manager);
+    }
+
+    @Test
+    void shouldAllowCollaboratorToReadAnotherUsersApprovedDocument()
+            throws Exception {
+        User collaborator = createUser(
+                "get-approved-viewer",
+                Role.COLLABORATOR
+        );
+        User owner = createUser(
+                "get-approved-owner",
+                Role.COLLABORATOR
+        );
+        Document document = createDocument(
+                "Approved document",
+                owner,
+                DocumentStatus.APPROVED
+        );
+
+        expectVisibleDocument(document, collaborator);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = DocumentStatus.class,
+            names = {"DRAFT", "IN_REVIEW", "ARCHIVED"}
+    )
+    void shouldConcealAnotherUsersNonApprovedDocumentFromCollaborator(
+            DocumentStatus status
+    ) throws Exception {
+        User collaborator = createUser(
+                "get-concealed-viewer-" + status.name(),
+                Role.COLLABORATOR
+        );
+        User owner = createUser(
+                "get-concealed-owner-" + status.name(),
+                Role.COLLABORATOR
+        );
+        Document document = createDocument(
+                "Concealed " + status.name(),
+                owner,
+                status
+        );
+
+        expectNotFound(document.getId(), tokenFor(collaborator));
+    }
+
+    @Test
     void shouldReturnNotFoundForUnknownDocument()
             throws Exception {
 
@@ -292,39 +379,10 @@ class DocumentControllerIntegrationTest
         String documentId =
                 "33333333-3333-3333-3333-333333333333";
 
-        mockMvc.perform(
-                        get(
-                                "/api/v1/documents/{id}",
-                                documentId
-                        )
-                                .header(
-                                        "Authorization",
-                                        "Bearer " + tokenFor(user)
-                                )
-                )
-                .andExpect(status().isNotFound())
-                .andExpect(
-                        jsonPath("$.status")
-                                .value(404)
-                )
-                .andExpect(
-                        jsonPath("$.error")
-                                .value("NOT_FOUND")
-                )
-                .andExpect(
-                        jsonPath("$.message")
-                                .value("Document not found")
-                )
-                .andExpect(
-                        jsonPath("$.path")
-                                .value(
-                                        "/api/v1/documents/"
-                                                + documentId
-                                )
-                )
-                .andExpect(
-                        jsonPath("$.correlationId").exists()
-                );
+        expectNotFound(
+                UUID.fromString(documentId),
+                tokenFor(user)
+        );
     }
 
     @Test
@@ -357,5 +415,107 @@ class DocumentControllerIntegrationTest
                         JwtEncoderParameters.from(claims)
                 )
                 .getTokenValue();
+    }
+
+    private User createUser(String prefix, Role role) {
+        return userRepository.save(
+                new User(
+                        prefix + "-" + UUID.randomUUID()
+                                + "@docfy.local",
+                        passwordEncoder.encode("StrongPassword123!"),
+                        role
+                )
+        );
+    }
+
+    private Document createDocument(
+            String title,
+            User creator,
+            DocumentStatus status
+    ) {
+        User managedCreator = userRepository
+                .findById(creator.getId())
+                .orElseThrow();
+        Document document = documentRepository.saveAndFlush(
+                new Document(
+                        title,
+                        "Document visibility integration test",
+                        managedCreator
+                )
+        );
+
+        if (status != DocumentStatus.DRAFT) {
+            jdbcTemplate.update(
+                    "UPDATE documents SET status = ? WHERE id = ?",
+                    status.name(),
+                    document.getId()
+            );
+        }
+
+        entityManager.clear();
+
+        return documentRepository
+                .findById(document.getId())
+                .orElseThrow();
+    }
+
+    private void expectVisibleDocument(
+            Document document,
+            User viewer
+    ) throws Exception {
+        mockMvc.perform(
+                        get(
+                                "/api/v1/documents/{id}",
+                                document.getId()
+                        )
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + tokenFor(viewer)
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.id")
+                                .value(document.getId().toString())
+                );
+    }
+
+    private void expectNotFound(
+            UUID documentId,
+            String token
+    ) throws Exception {
+        mockMvc.perform(
+                        get(
+                                "/api/v1/documents/{id}",
+                                documentId
+                        )
+                                .header(
+                                        "Authorization",
+                                        "Bearer " + token
+                                )
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(
+                        jsonPath("$.status")
+                                .value(404)
+                )
+                .andExpect(
+                        jsonPath("$.error")
+                                .value("NOT_FOUND")
+                )
+                .andExpect(
+                        jsonPath("$.message")
+                                .value("Document not found")
+                )
+                .andExpect(
+                        jsonPath("$.path")
+                                .value(
+                                        "/api/v1/documents/"
+                                                + documentId
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.correlationId").exists()
+                );
     }
 }

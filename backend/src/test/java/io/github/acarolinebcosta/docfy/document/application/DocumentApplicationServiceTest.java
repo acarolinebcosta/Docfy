@@ -6,15 +6,24 @@ import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentRepository;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentStatus;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import java.util.Optional;
-import java.util.UUID;
 
 class DocumentApplicationServiceTest {
 
@@ -24,7 +33,10 @@ class DocumentApplicationServiceTest {
                 mock(DocumentRepository.class);
 
         DocumentApplicationService service =
-                new DocumentApplicationService(repository);
+                new DocumentApplicationService(
+                        repository,
+                        mock(DocumentVisibilityPolicy.class)
+                );
 
         User user = new User(
                 "creator@docfy.local",
@@ -77,62 +89,203 @@ class DocumentApplicationServiceTest {
                 )
         );
     }
+
     @Test
-void shouldReturnDocumentById() {
-    DocumentRepository repository =
-            mock(DocumentRepository.class);
+    void shouldReturnVisibleDocumentById() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy
+                );
+        User user = new User(
+                "reader@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        Document document = new Document(
+                "Quality Strategy",
+                "Document quality strategy",
+                user
+        );
+        UUID documentId = UUID.fromString(
+                "11111111-1111-1111-1111-111111111111"
+        );
 
-    DocumentApplicationService service =
-            new DocumentApplicationService(repository);
+        when(repository.findById(documentId))
+                .thenReturn(Optional.of(document));
+        when(visibilityPolicy.canView(document, user))
+                .thenReturn(true);
 
-    User user = new User(
-            "reader@docfy.local",
-            "{bcrypt}encoded-password",
-            Role.COLLABORATOR
-    );
+        Document result = service.getById(documentId, user);
 
-    Document document = new Document(
-            "Quality Strategy",
-            "Document quality strategy",
-            user
-    );
+        assertEquals(document, result);
+        verify(repository).findById(documentId);
+        verify(visibilityPolicy).canView(document, user);
+    }
 
-    UUID documentId =
-            UUID.fromString(
-                    "11111111-1111-1111-1111-111111111111"
-            );
+    @Test
+    void shouldConcealDocumentThatViewerCannotSee() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy
+                );
+        User viewer = new User(
+                "viewer@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        User owner = new User(
+                "owner@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        Document document = new Document(
+                "Private draft",
+                "Another user's document",
+                owner
+        );
+        UUID documentId = UUID.fromString(
+                "22222222-2222-2222-2222-222222222222"
+        );
 
-    when(repository.findById(documentId))
-            .thenReturn(Optional.of(document));
+        when(repository.findById(documentId))
+                .thenReturn(Optional.of(document));
+        when(visibilityPolicy.canView(document, viewer))
+                .thenReturn(false);
 
-    Document result = service.getById(documentId);
+        assertThrows(
+                DocumentNotFoundException.class,
+                () -> service.getById(documentId, viewer)
+        );
 
-    assertEquals(document, result);
+        verify(repository).findById(documentId);
+        verify(visibilityPolicy).canView(document, viewer);
+    }
 
-    verify(repository).findById(documentId);
-}
+    @Test
+    void shouldThrowWhenDocumentDoesNotExist() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy
+                );
+        User viewer = new User(
+                "missing-reader@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        UUID documentId = UUID.fromString(
+                "33333333-3333-3333-3333-333333333333"
+        );
 
-@Test
-void shouldThrowWhenDocumentDoesNotExist() {
-    DocumentRepository repository =
-            mock(DocumentRepository.class);
+        when(repository.findById(documentId))
+                .thenReturn(Optional.empty());
 
-    DocumentApplicationService service =
-            new DocumentApplicationService(repository);
+        assertThrows(
+                DocumentNotFoundException.class,
+                () -> service.getById(documentId, viewer)
+        );
 
-    UUID documentId =
-            UUID.fromString(
-                    "22222222-2222-2222-2222-222222222222"
-            );
+        verify(repository).findById(documentId);
+    }
 
-    when(repository.findById(documentId))
-            .thenReturn(Optional.empty());
+    @Test
+    void shouldListEveryDocumentForUnrestrictedViewer() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy
+                );
+        User viewer = mockUser(Role.ADMIN);
+        Page<Document> expected = new PageImpl<>(List.of());
+        ArgumentCaptor<Pageable> pageableCaptor =
+                ArgumentCaptor.forClass(Pageable.class);
 
-    assertThrows(
-            DocumentNotFoundException.class,
-            () -> service.getById(documentId)
-    );
+        when(visibilityPolicy.canViewAll(viewer)).thenReturn(true);
+        when(repository.findAll(any(Pageable.class)))
+                .thenReturn(expected);
 
-    verify(repository).findById(documentId);
-}
+        Page<Document> result = service.listVisible(viewer, 2, 10);
+
+        assertEquals(expected, result);
+        verify(repository).findAll(pageableCaptor.capture());
+        assertPageable(pageableCaptor.getValue(), 2, 10);
+    }
+
+    @Test
+    void shouldQueryOnlyOwnOrApprovedDocumentsForCollaborator() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy
+                );
+        User viewer = mockUser(Role.COLLABORATOR);
+        Page<Document> expected = new PageImpl<>(List.of());
+        ArgumentCaptor<Pageable> pageableCaptor =
+                ArgumentCaptor.forClass(Pageable.class);
+
+        when(visibilityPolicy.canViewAll(viewer)).thenReturn(false);
+        when(
+                repository.findByCreatedByIdOrStatus(
+                        eq(viewer.getId()),
+                        eq(DocumentStatus.APPROVED),
+                        any(Pageable.class)
+                )
+        ).thenReturn(expected);
+
+        Page<Document> result = service.listVisible(viewer, 0, 20);
+
+        assertEquals(expected, result);
+        verify(repository).findByCreatedByIdOrStatus(
+                eq(viewer.getId()),
+                eq(DocumentStatus.APPROVED),
+                pageableCaptor.capture()
+        );
+        assertPageable(pageableCaptor.getValue(), 0, 20);
+    }
+
+    private void assertPageable(
+            Pageable pageable,
+            int expectedPage,
+            int expectedSize
+    ) {
+        assertEquals(expectedPage, pageable.getPageNumber());
+        assertEquals(expectedSize, pageable.getPageSize());
+
+        Sort.Order updatedAt = pageable.getSort().getOrderFor("updatedAt");
+        Sort.Order id = pageable.getSort().getOrderFor("id");
+
+        assertTrue(updatedAt != null && updatedAt.isDescending());
+        assertTrue(id != null && id.isAscending());
+    }
+
+    private User mockUser(Role role) {
+        User user = mock(User.class);
+
+        when(user.getId()).thenReturn(UUID.randomUUID());
+        when(user.getRole()).thenReturn(role);
+
+        return user;
+    }
 }

@@ -90,11 +90,12 @@ Main capabilities:
 * review submitted documents;
 * approve or reject documents;
 * archive documents;
+* access all documents;
 * access document history.
 
 ### Collaborator
 
-Responsible for creating and maintaining documents within their scope.
+Responsible for creating and maintaining their documents and consulting approved documents.
 
 Main capabilities:
 
@@ -102,7 +103,8 @@ Main capabilities:
 * upload files;
 * edit their own drafts;
 * submit documents for review;
-* view documents they are authorized to access.
+* view their own documents in any lifecycle status;
+* view documents created by other users only while they are `APPROVED`.
 
 ---
 
@@ -163,6 +165,18 @@ Initial roles:
 * ADMIN;
 * MANAGER;
 * COLLABORATOR.
+
+Document visibility is defined by role, creator and status:
+
+| Role | Own document, any status | Other `DRAFT` | Other `IN_REVIEW` | Other `APPROVED` | Other `ARCHIVED` |
+|---|---:|---:|---:|---:|---:|
+| `ADMIN` | Yes | Yes | Yes | Yes | Yes |
+| `MANAGER` | Yes | Yes | Yes | Yes | Yes |
+| `COLLABORATOR` | Yes | No | No | Yes | No |
+
+`COLLABORATOR` users can always view documents they created, regardless of status. For documents created by another user, they can view only the `APPROVED` status.
+
+When a document exists but is not visible to the authenticated user, the API must return the same `404 Not Found` response used for a nonexistent document. This resource-concealment rule prevents document enumeration.
 
 ### Search and Filters
 
@@ -297,7 +311,14 @@ Status changes must record:
 
 ### BR-010 — Access Control
 
-Users must not access documents for which they do not have permission.
+Document read access must follow these rules:
+
+* `ADMIN` and `MANAGER` can view every document, regardless of creator or status;
+* `COLLABORATOR` can view every document they created, regardless of status;
+* `COLLABORATOR` can view another user's document only when its status is `APPROVED`;
+* a document that is missing or not visible to the authenticated user produces the same public `404 Not Found` response.
+
+The same visibility policy must be applied to direct lookup, listing and search. Authorization filtering must occur before pagination or result disclosure.
 
 ---
 
