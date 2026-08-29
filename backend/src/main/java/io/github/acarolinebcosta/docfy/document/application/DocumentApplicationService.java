@@ -4,6 +4,7 @@ import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentRepository;
 import org.springframework.stereotype.Service;
+
 import java.util.UUID;
 
 @Service
@@ -29,11 +30,12 @@ public class DocumentApplicationService {
 
         return documentRepository.save(document);
     }
+
     public Document getById(UUID documentId) {
-    return documentRepository
-            .findById(documentId)
-            .orElseThrow(
-                    () -> new DocumentNotFoundException(documentId)
-            );
-}
+        return documentRepository
+                .findById(documentId)
+                .orElseThrow(
+                        () -> new DocumentNotFoundException(documentId)
+                );
+    }
 }

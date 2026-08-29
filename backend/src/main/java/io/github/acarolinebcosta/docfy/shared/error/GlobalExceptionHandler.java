@@ -1,9 +1,9 @@
 package io.github.acarolinebcosta.docfy.shared.error;
 
 import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
+import io.github.acarolinebcosta.docfy.document.application.DocumentNotFoundException;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
-import io.github.acarolinebcosta.docfy.document.application.DocumentNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -144,6 +144,27 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(DocumentNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleDocumentNotFoundException(
+            DocumentNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Document not found. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.NOT_FOUND,
+                "Document not found",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpectedError(
             Exception exception,
@@ -165,27 +186,6 @@ public class GlobalExceptionHandler {
                 correlationId
         );
     }
-
-    @ExceptionHandler(DocumentNotFoundException.class)
-public ResponseEntity<ApiErrorResponse> handleDocumentNotFoundException(
-        DocumentNotFoundException exception,
-        HttpServletRequest request
-) {
-    String correlationId = getCorrelationId();
-
-    LOGGER.warn(
-            "Document not found. correlationId={}, path={}",
-            correlationId,
-            request.getRequestURI()
-    );
-
-    return buildResponseEntity(
-            HttpStatus.NOT_FOUND,
-            "Document not found",
-            request.getRequestURI(),
-            correlationId
-    );
-}
 
     private ResponseEntity<ApiErrorResponse> buildResponseEntity(
             HttpStatus status,
