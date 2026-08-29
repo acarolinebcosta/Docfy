@@ -1,6 +1,7 @@
 package io.github.acarolinebcosta.docfy.shared.error;
 
 import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
+import io.github.acarolinebcosta.docfy.document.application.DocumentNotFoundException;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -138,6 +139,27 @@ public class GlobalExceptionHandler {
         return buildResponseEntity(
                 HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                 "Unsupported media type",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
+    @ExceptionHandler(DocumentNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleDocumentNotFoundException(
+            DocumentNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Document not found. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.NOT_FOUND,
+                "Document not found",
                 request.getRequestURI(),
                 correlationId
         );
