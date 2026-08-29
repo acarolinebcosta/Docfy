@@ -92,7 +92,9 @@ A user may access a document for which they do not have permission.
 
 * API authorization tests;
 * role-based access tests;
-* direct resource access attempts;
+* direct resource access attempts using another user's document identifier;
+* resource-concealment tests proving missing and unauthorized documents share the same public `404` contract;
+* authorization-aware listing and pagination tests;
 * E2E permission scenarios;
 * negative testing;
 * security-focused exploratory testing.
@@ -324,7 +326,7 @@ Authentication or session handling may allow unauthorized application access or 
 
 ---
 
-## RISK-009 — Search exposes unauthorized documents
+## RISK-009 — Document discovery exposes unauthorized documents
 
 **Related requirements:** FR-009, BR-010
 **Impact:** Critical
@@ -333,7 +335,7 @@ Authentication or session handling may allow unauthorized application access or 
 
 ### Risk
 
-Search results may return documents the authenticated user is not allowed to access.
+Listing or search results may return documents that are not visible to the authenticated user under BR-010.
 
 ### Potential impact
 
@@ -348,7 +350,9 @@ Even when the document itself cannot be opened, metadata may expose:
 ### Recommended coverage
 
 * API authorization tests;
-* search using users with different permissions;
+* listing and search using users with different roles and document ownership;
+* validation that authorization filtering occurs before pagination;
+* visible-result totals and page counts by role;
 * filter combinations;
 * direct document access after search;
 * E2E validation.
@@ -572,7 +576,7 @@ Examples:
 | RISK-006 | Duplicate document identifiers     | High     | Low         | 🟡 Medium   |
 | RISK-007 | Invalid or unsafe upload           | High     | Medium      | 🟠 High     |
 | RISK-008 | Authentication/session failure     | Critical | Medium      | 🔴 Critical |
-| RISK-009 | Search exposes protected documents | Critical | Medium      | 🔴 Critical |
+| RISK-009 | Document discovery exposes protected documents | Critical | Medium      | 🔴 Critical |
 | RISK-010 | Concurrent workflow conflict       | High     | Low         | 🟡 Medium   |
 | RISK-011 | Missing required information       | Medium   | Medium      | 🟡 Medium   |
 | RISK-012 | Partial update during failure      | High     | Low         | 🟡 Medium   |

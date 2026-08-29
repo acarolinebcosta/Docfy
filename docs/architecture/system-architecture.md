@@ -453,6 +453,11 @@ Example permission model:
 | Operation | Collaborator | Manager | Admin |
 |---|---:|---:|---:|
 | Create document | Yes | Yes | Yes |
+| View own document, any status | Yes | Yes | Yes |
+| View another user's draft | No | Yes | Yes |
+| View another user's document in review | No | Yes | Yes |
+| View another user's approved document | Yes | Yes | Yes |
+| View another user's archived document | No | Yes | Yes |
 | Edit own draft | Yes | Yes | Yes |
 | Submit for review | Yes | Yes | Yes |
 | Review document | No | Yes | Yes |
@@ -463,6 +468,47 @@ Example permission model:
 | View audit information | Limited | Yes | Yes |
 
 The final permission model may evolve.
+
+### Document visibility policy
+
+Document visibility is evaluated using the authenticated user's role, the document creator and the document status:
+
+* `ADMIN` and `MANAGER` have unrestricted read visibility;
+* `COLLABORATOR` can read their own documents in every status;
+* `COLLABORATOR` can read documents created by other users only in `APPROVED` status.
+
+This policy is implemented as one reusable application authorization component. Direct lookup evaluates the fetched document against the policy. Listing and future search apply the equivalent predicate in the database query before pagination:
+
+```text
+ADMIN or MANAGER
+    → all documents
+
+COLLABORATOR
+    → created_by = authenticated user
+      OR status = APPROVED
+```
+
+Filtering an already paginated, unrestricted result in memory is not permitted because it would produce incorrect totals, unstable pages and possible metadata disclosure.
+
+If direct lookup finds a document that is not visible to the authenticated user, the application raises the same not-found outcome used for an unknown identifier. The HTTP response is `404 Not Found`, with the existing safe `Document not found` contract, so callers cannot distinguish a missing document from a concealed document.
+
+### Document listing contract
+
+`GET /api/v1/documents` returns an explicit paginated response:
+
+```json
+{
+  "items": [],
+  "page": 0,
+  "size": 20,
+  "totalElements": 0,
+  "totalPages": 0
+}
+```
+
+Page numbering is zero-based. The default page is `0`, the default size is `20`, and the maximum size is `100`. Negative page numbers, non-positive sizes and sizes above the maximum are rejected with `400 Bad Request`; invalid sizes are not silently clamped.
+
+Results are ordered by `updatedAt DESC` and then `id ASC`. The identifier is the deterministic tie-breaker required for stable navigation between pages.
 
 ---
 
@@ -745,9 +791,9 @@ RISK-007 — Invalid or unsafe file upload
 
 ---
 
-## 27. Search
+## 27. Listing and Search
 
-Document search should always respect authorization rules.
+Document listing and search must always apply the document visibility policy before returning or paginating results.
 
 The architecture must avoid:
 
@@ -766,7 +812,7 @@ Authenticated user
        ↓
 Authorization context
        ↓
-Search only allowed documents
+Query only documents visible to the authenticated user
        ↓
 Return filtered result set
 ```
