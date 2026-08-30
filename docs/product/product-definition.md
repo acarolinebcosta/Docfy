@@ -261,7 +261,34 @@ Users must be able to upload supported files to a document.
 
 ### FR-012 — Audit History
 
-Relevant document lifecycle changes must be recorded.
+Relevant document lifecycle changes must be recorded as immutable audit events.
+
+Each successful lifecycle transition must record:
+
+* document identifier;
+* actor;
+* action;
+* timestamp;
+* previous status;
+* new status;
+* correlation ID when available.
+
+The following lifecycle actions generate audit events:
+
+* document submission;
+* document approval;
+* document rejection;
+* document archive.
+
+Audit information must be persisted in the same transaction as the lifecycle change.
+
+If audit persistence fails, the lifecycle transition must also be rolled back.
+
+`ADMIN` and `MANAGER` users may retrieve the audit history of documents they are authorized to view.
+
+`COLLABORATOR` users cannot retrieve audit history.
+
+When the requested document is not visible to the authenticated user, audit history requests must return the same `404 Not Found` response used for a nonexistent document.
 
 ---
 
@@ -283,7 +310,7 @@ A document must contain at least:
 
 Only users with `MANAGER` or `ADMIN` roles can approve or reject documents.
 
-### FR-004 — Document Submission
+### BR-004 — Document Submission
 
 Documents in `DRAFT` status may be submitted for review.
 
@@ -316,7 +343,7 @@ Only documents in `APPROVED` status can be archived.
 Only users with `MANAGER` or `ADMIN` roles can archive approved documents.
 
 
-### FR-008 — Document Archive
+### BR-008 — Document Archive
 
 Only `MANAGER` and `ADMIN` users may archive documents.
 
@@ -327,13 +354,37 @@ A successful archive operation changes the document status from `APPROVED` to `A
 
 ### BR-009 — Auditability
 
-Status changes must record:
+Every successful document lifecycle transition must create an immutable audit event.
 
-* user;
+Each audit event must record:
+
+* document identifier;
+* actor;
 * action;
 * timestamp;
 * previous status;
-* new status.
+* new status;
+* correlation ID when available.
+
+The supported audit actions are:
+
+* `DOCUMENT_SUBMITTED`;
+* `DOCUMENT_APPROVED`;
+* `DOCUMENT_REJECTED`;
+* `DOCUMENT_ARCHIVED`.
+
+Lifecycle state changes and their corresponding audit events must be committed atomically.
+
+A document status change must not be persisted if the corresponding audit event cannot be persisted.
+
+Audit history access follows these rules:
+
+* `ADMIN` users may view document audit history;
+* `MANAGER` users may view document audit history;
+* `COLLABORATOR` users cannot view document audit history;
+* document visibility must be evaluated before audit authorization;
+* a missing or concealed document produces `404 Not Found`;
+* a visible document whose audit history is forbidden to the caller produces `403 Forbidden`.
 
 ### BR-010 — Access Control
 

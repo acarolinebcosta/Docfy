@@ -1,8 +1,11 @@
 package io.github.acarolinebcosta.docfy.document.application;
 
+import io.github.acarolinebcosta.docfy.audit.application.DocumentAuditService;
+import io.github.acarolinebcosta.docfy.audit.domain.DocumentAuditAction;
 import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentRepository;
+import io.github.acarolinebcosta.docfy.document.domain.DocumentStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,15 +17,18 @@ public class DocumentWorkflowService {
     private final DocumentRepository documentRepository;
     private final DocumentVisibilityPolicy visibilityPolicy;
     private final DocumentWorkflowPolicy workflowPolicy;
+    private final DocumentAuditService auditService;
 
     public DocumentWorkflowService(
             DocumentRepository documentRepository,
             DocumentVisibilityPolicy visibilityPolicy,
-            DocumentWorkflowPolicy workflowPolicy
+            DocumentWorkflowPolicy workflowPolicy,
+            DocumentAuditService auditService
     ) {
         this.documentRepository = documentRepository;
         this.visibilityPolicy = visibilityPolicy;
         this.workflowPolicy = workflowPolicy;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -39,7 +45,17 @@ public class DocumentWorkflowService {
             throw new DocumentWorkflowForbiddenException();
         }
 
+        DocumentStatus previousStatus =
+                document.getStatus();
+
         document.submitForReview();
+
+        auditService.record(
+                document,
+                actor,
+                DocumentAuditAction.DOCUMENT_SUBMITTED,
+                previousStatus
+        );
 
         return document;
     }
@@ -58,7 +74,17 @@ public class DocumentWorkflowService {
             throw new DocumentWorkflowForbiddenException();
         }
 
+        DocumentStatus previousStatus =
+                document.getStatus();
+
         document.approve();
+
+        auditService.record(
+                document,
+                actor,
+                DocumentAuditAction.DOCUMENT_APPROVED,
+                previousStatus
+        );
 
         return document;
     }
@@ -77,7 +103,17 @@ public class DocumentWorkflowService {
             throw new DocumentWorkflowForbiddenException();
         }
 
+        DocumentStatus previousStatus =
+                document.getStatus();
+
         document.reject();
+
+        auditService.record(
+                document,
+                actor,
+                DocumentAuditAction.DOCUMENT_REJECTED,
+                previousStatus
+        );
 
         return document;
     }
@@ -96,7 +132,17 @@ public class DocumentWorkflowService {
             throw new DocumentWorkflowForbiddenException();
         }
 
+        DocumentStatus previousStatus =
+                document.getStatus();
+
         document.archive();
+
+        auditService.record(
+                document,
+                actor,
+                DocumentAuditAction.DOCUMENT_ARCHIVED,
+                previousStatus
+        );
 
         return document;
     }

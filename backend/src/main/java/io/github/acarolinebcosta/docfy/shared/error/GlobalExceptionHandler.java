@@ -1,5 +1,6 @@
 package io.github.acarolinebcosta.docfy.shared.error;
 
+import io.github.acarolinebcosta.docfy.audit.application.DocumentAuditForbiddenException;
 import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentEditForbiddenException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentNotFoundException;
@@ -130,6 +131,27 @@ public class GlobalExceptionHandler {
         return buildResponseEntity(
                 HttpStatus.BAD_REQUEST,
                 "Invalid request",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
+    @ExceptionHandler(DocumentAuditForbiddenException.class)
+    public ResponseEntity<ApiErrorResponse> handleDocumentAuditForbiddenException(
+            DocumentAuditForbiddenException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Document audit access forbidden. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.FORBIDDEN,
+                "Forbidden",
                 request.getRequestURI(),
                 correlationId
         );
