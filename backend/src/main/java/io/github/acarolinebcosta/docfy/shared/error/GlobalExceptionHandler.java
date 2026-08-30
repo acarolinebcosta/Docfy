@@ -3,6 +3,8 @@ package io.github.acarolinebcosta.docfy.shared.error;
 import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentEditForbiddenException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentNotFoundException;
+import io.github.acarolinebcosta.docfy.document.application.DocumentWorkflowForbiddenException;
+import io.github.acarolinebcosta.docfy.document.domain.InvalidDocumentStatusTransitionException;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,6 +44,49 @@ public class GlobalExceptionHandler {
         return buildResponseEntity(
                 HttpStatus.FORBIDDEN,
                 "Forbidden",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
+    @ExceptionHandler(DocumentWorkflowForbiddenException.class)
+    public ResponseEntity<ApiErrorResponse> handleDocumentWorkflowForbiddenException(
+            DocumentWorkflowForbiddenException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Document workflow action forbidden. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.FORBIDDEN,
+                "Forbidden",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
+    @ExceptionHandler(InvalidDocumentStatusTransitionException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidDocumentStatusTransition(
+            InvalidDocumentStatusTransitionException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Invalid document status transition. correlationId={}, path={}, message={}",
+                correlationId,
+                request.getRequestURI(),
+                exception.getMessage()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
                 request.getRequestURI(),
                 correlationId
         );

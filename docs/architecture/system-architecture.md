@@ -628,11 +628,84 @@ Rejection returns the document directly to `DRAFT`; it does not create a separat
 
 The backend domain layer must enforce valid transitions.
 
+### Workflow API
+
+Document lifecycle transitions are exposed through explicit action endpoints:
+
+```text
+POST /api/v1/documents/{id}/submit
+POST /api/v1/documents/{id}/approve
+POST /api/v1/documents/{id}/reject
+POST /api/v1/documents/{id}/archive
+```
+
+Successful operations return the updated document representation.
+
+The initial action authorization model is:
+
+| Action                        | Collaborator | Manager | Admin |
+| ----------------------------- | -----------: | ------: | ----: |
+| Submit own `DRAFT`            |          Yes |     Yes |   Yes |
+| Submit another user's `DRAFT` |           No |     Yes |   Yes |
+| Approve `IN_REVIEW`           |           No |     Yes |   Yes |
+| Reject `IN_REVIEW`            |           No |     Yes |   Yes |
+| Archive `APPROVED`            |           No |     Yes |   Yes |
+
+Workflow authorization is separated from lifecycle-state validation.
+
+The application evaluates a workflow request in the following order:
+
+```text
+Load document
+    ↓
+Document visible to actor?
+    ├── No → 404 Not Found
+    ↓
+Actor authorized for action?
+    ├── No → 403 Forbidden
+    ↓
+Current state allows transition?
+    ├── No → 409 Conflict
+    ↓
+Apply lifecycle transition
+```
+
+The visibility check occurs before action authorization so concealed resources cannot be enumerated.
+
+A missing document and a document that exists but is not visible to the caller therefore produce the same safe `404 Not Found` contract.
+
+A caller who can view the document but does not have permission to execute the requested workflow action receives `403 Forbidden`.
+
+An authorized caller attempting a transition that conflicts with the current document state receives `409 Conflict`.
+
+
 ---
 
 ## 19. State Transition Enforcement
 
-Invalid transitions must be rejected regardless of the caller.
+Lifecycle invariants are enforced by the `Document` domain entity rather than by directly assigning document status from controllers or application services.
+
+The domain exposes explicit transition operations:
+
+```text
+submitForReview()
+approve()
+reject()
+archive()
+```
+
+No public generic status setter is exposed.
+
+Valid transitions are:
+
+```text
+DRAFT → IN_REVIEW
+IN_REVIEW → APPROVED
+IN_REVIEW → DRAFT
+APPROVED → ARCHIVED
+```
+
+Every other transition is invalid.
 
 Examples:
 
@@ -649,25 +722,36 @@ ARCHIVED → IN_REVIEW
 must fail.
 
 ```text
-IN_REVIEW → APPROVED
+APPROVED → DRAFT
 ```
 
-may succeed when the authenticated user has the required permission.
+must fail.
+
+Invalid lifecycle transitions raise a domain exception that is translated by the HTTP layer to `409 Conflict`.
+
+Workflow responsibilities are separated as follows:
 
 ```text
-IN_REVIEW → DRAFT
+DocumentVisibilityPolicy
+    → determines whether the resource may be disclosed
+
+DocumentWorkflowPolicy
+    → determines whether the actor may execute the requested action
+
+DocumentWorkflowService
+    → coordinates resource lookup, visibility and authorization
+
+Document
+    → enforces valid lifecycle transitions
 ```
 
-may succeed when an authenticated user with the required permission rejects the document.
-
-State validation should occur in the domain or application layer rather than only in the UI.
+Workflow mutations execute inside transactions. Documents loaded through the repository remain managed entities, allowing lifecycle changes to be persisted through JPA dirty checking without an explicit repository `save()` call.
 
 This addresses:
 
 ```text
 RISK-003 — Invalid document state transition
 ```
-
 ---
 
 ## 20. Transactional Workflow
