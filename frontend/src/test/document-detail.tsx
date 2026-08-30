@@ -1,9 +1,9 @@
 import { render } from "@testing-library/react";
 import {
+  Link,
   MemoryRouter,
   Route,
   Routes,
-  useNavigate,
 } from "react-router-dom";
 
 import { AuthProvider } from "@/auth/AuthProvider";
@@ -52,19 +52,6 @@ export function auditEventFixture(
   };
 }
 
-function NavigationControl() {
-  const navigate = useNavigate();
-
-  return (
-    <button
-      type="button"
-      onClick={() => navigate(`/documents/${DOCUMENT_B_ID}`)}
-    >
-      Abrir documento B
-    </button>
-  );
-}
-
 export function renderDocumentDetail({
   role = "COLLABORATOR",
   userId = OWNER_ID,
@@ -82,7 +69,9 @@ export function renderDocumentDetail({
   return render(
     <MemoryRouter initialEntries={[`/documents/${documentId}`]}>
       <AuthProvider>
-        <NavigationControl />
+        <Link to={`/documents/${DOCUMENT_B_ID}`}>
+          Abrir documento B
+        </Link>
         <Routes>
           <Route path="/login" element={<p>Acesse o Docfy</p>} />
           <Route element={<ProtectedRoute />}>

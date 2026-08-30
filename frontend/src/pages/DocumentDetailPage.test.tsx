@@ -11,7 +11,6 @@ import { formatDateTime } from "@/lib/date";
 import { server } from "@/test/server";
 import {
   DOCUMENT_A_ID,
-  DOCUMENT_B_ID,
   OTHER_USER_ID,
   OWNER_ID,
   documentFixture,
@@ -48,7 +47,7 @@ describe("DocumentDetailPage loading and detail", () => {
 
     expect(screen.getByText("Carregando documento")).toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: document.title }),
+      await screen.findByRole("heading", { name: document.title, level: 1 }),
     ).toBeInTheDocument();
     expect(screen.getByText(document.description!)).toBeInTheDocument();
     expect(screen.getByText("Você")).toBeInTheDocument();
@@ -110,7 +109,7 @@ describe("DocumentDetailPage loading and detail", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Quality Policy" }),
+      await screen.findByRole("heading", { name: "Quality Policy", level: 1 }),
     ).toBeInTheDocument();
     expect(requests).toBe(2);
   });
@@ -163,11 +162,11 @@ describe("DocumentDetailPage loading and detail", () => {
     const user = userEvent.setup();
     renderDocumentDetail();
     expect(
-      await screen.findByRole("heading", { name: "Documento A" }),
+      await screen.findByRole("heading", { name: "Documento A", level: 1 }),
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("button", { name: "Abrir documento B" }),
+      screen.getByRole("link", { name: "Abrir documento B" }),
     );
 
     expect(
@@ -193,7 +192,7 @@ describe("DocumentDetailPage edit UX", () => {
       useDocumentResponse(documentFixture({ status }));
       renderDocumentDetail({ role: role as Role, userId });
 
-      await screen.findByRole("heading", { name: "Quality Policy" });
+      await screen.findByRole("heading", { name: "Quality Policy", level: 1 });
 
       if (expected) {
         expect(
@@ -281,7 +280,7 @@ describe("DocumentDetailPage edit UX", () => {
       await screen.findByText("Documento atualizado com sucesso."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Updated Policy" }),
+      screen.getByRole("heading", { name: "Updated Policy", level: 1 }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("form", { name: "Editar documento" }),

@@ -155,7 +155,7 @@ describe("DocumentDetailPage workflow", () => {
     useDocumentAndAudit(documentFixture({ status: "IN_REVIEW" }));
     renderDocumentDetail();
 
-    await screen.findByRole("heading", { name: "Quality Policy" });
+    await screen.findByRole("heading", { name: "Quality Policy", level: 1 });
 
     expect(
       screen.queryByRole("button", { name: "Aprovar" }),
@@ -308,7 +308,7 @@ describe("DocumentDetailPage Audit Trail", () => {
     );
 
     renderDocumentDetail();
-    await screen.findByRole("heading", { name: "Quality Policy" });
+    await screen.findByRole("heading", { name: "Quality Policy", level: 1 });
 
     expect(
       screen.queryByRole("heading", { name: "Audit Trail" }),
