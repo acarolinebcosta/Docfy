@@ -74,19 +74,61 @@ public class Document {
     }
 
     public void updateMetadata(
-        String title,
-        boolean updateTitle,
-        String description,
-        boolean updateDescription
+            String title,
+            boolean updateTitle,
+            String description,
+            boolean updateDescription
     ) {
-    if (updateTitle) {
-        this.title = title;
+        if (updateTitle) {
+            this.title = title;
+        }
+
+        if (updateDescription) {
+            this.description = description;
+        }
     }
 
-    if (updateDescription) {
-        this.description = description;
+    public void submitForReview() {
+        transitionTo(
+                DocumentStatus.DRAFT,
+                DocumentStatus.IN_REVIEW
+        );
     }
-   }
+
+    public void approve() {
+        transitionTo(
+                DocumentStatus.IN_REVIEW,
+                DocumentStatus.APPROVED
+        );
+    }
+
+    public void reject() {
+        transitionTo(
+                DocumentStatus.IN_REVIEW,
+                DocumentStatus.DRAFT
+        );
+    }
+
+    public void archive() {
+        transitionTo(
+                DocumentStatus.APPROVED,
+                DocumentStatus.ARCHIVED
+        );
+    }
+
+    private void transitionTo(
+            DocumentStatus expectedStatus,
+            DocumentStatus targetStatus
+    ) {
+        if (status != expectedStatus) {
+            throw new InvalidDocumentStatusTransitionException(
+                    status,
+                    targetStatus
+            );
+        }
+
+        status = targetStatus;
+    }
 
     public UUID getId() {
         return id;

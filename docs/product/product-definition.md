@@ -283,33 +283,47 @@ A document must contain at least:
 
 Only users with `MANAGER` or `ADMIN` roles can approve or reject documents.
 
-### BR-004 — Non-Draft Document Modification
+### FR-004 — Document Submission
 
-Document metadata cannot be directly modified while the document is in `IN_REVIEW`, `APPROVED` or `ARCHIVED` status.
+Documents in `DRAFT` status may be submitted for review.
 
-Only `DRAFT` documents can be edited.
+`ADMIN` and `MANAGER` users may submit any draft document.
 
-`ADMIN` and `MANAGER` may edit any document while it remains in `DRAFT`.
+`COLLABORATOR` users may submit only draft documents they created.
 
-`COLLABORATOR` may edit only their own `DRAFT` documents.
-
-Changes to an approved document must create a new version in a future version of the product.
+A successful submission changes the document status from `DRAFT` to `IN_REVIEW`.
 
 ### BR-005 — Review Submission
 
 Only documents in `DRAFT` status can be submitted for review.
 
+`ADMIN` and `MANAGER` users can submit any draft document.
+
+`COLLABORATOR` users can submit only draft documents they created.
+
 ### BR-006 — Approval State
 
 Only documents in `IN_REVIEW` status can be approved or rejected.
 
+Only users with `MANAGER` or `ADMIN` roles can approve or reject documents.
+
+Rejection returns the document to `DRAFT`; there is no separate `REJECTED` status.
+
 ### BR-007 — Archive State
 
-Only approved documents can be archived.
+Only documents in `APPROVED` status can be archived.
 
-### BR-008 — File Validation
+Only users with `MANAGER` or `ADMIN` roles can archive approved documents.
 
-Uploaded files must comply with the supported format and size limits defined by the application.
+
+### FR-008 — Document Archive
+
+Only `MANAGER` and `ADMIN` users may archive documents.
+
+Only documents in `APPROVED` status may be archived.
+
+A successful archive operation changes the document status from `APPROVED` to `ARCHIVED`.
+
 
 ### BR-009 — Auditability
 
