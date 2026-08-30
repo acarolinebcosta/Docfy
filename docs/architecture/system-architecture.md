@@ -332,14 +332,14 @@ The frontend and backend will communicate through REST over HTTPS using JSON.
 Example:
 
 ```text
-POST /api/v1/documents
-GET  /api/v1/documents
-GET  /api/v1/documents/{id}
-PUT  /api/v1/documents/{id}
-POST /api/v1/documents/{id}/submit
-POST /api/v1/documents/{id}/approve
-POST /api/v1/documents/{id}/reject
-POST /api/v1/documents/{id}/archive
+POST  /api/v1/documents
+GET   /api/v1/documents
+GET   /api/v1/documents/{id}
+PATCH /api/v1/documents/{id}
+POST  /api/v1/documents/{id}/submit
+POST  /api/v1/documents/{id}/approve
+POST  /api/v1/documents/{id}/reject
+POST  /api/v1/documents/{id}/archive
 ```
 
 The final API structure may evolve during implementation.
@@ -459,6 +459,8 @@ Example permission model:
 | View another user's approved document | Yes | Yes | Yes |
 | View another user's archived document | No | Yes | Yes |
 | Edit own draft | Yes | Yes | Yes |
+| Edit another user's draft | No | Yes | Yes |
+| Edit non-draft document | No | No | No |
 | Submit for review | Yes | Yes | Yes |
 | Review document | No | Yes | Yes |
 | Approve document | No | Yes | Yes |
@@ -473,9 +475,9 @@ The final permission model may evolve.
 
 Document visibility is evaluated using the authenticated user's role, the document creator and the document status:
 
-* `ADMIN` and `MANAGER` have unrestricted read visibility;
-* `COLLABORATOR` can read their own documents in every status;
-* `COLLABORATOR` can read documents created by other users only in `APPROVED` status.
+- `ADMIN` and `MANAGER` have unrestricted read visibility;
+- `COLLABORATOR` can read their own documents in every status;
+- `COLLABORATOR` can read documents created by other users only in `APPROVED` status.
 
 This policy is implemented as one reusable application authorization component. Direct lookup evaluates the fetched document against the policy. Listing and future search apply the equivalent predicate in the database query before pagination:
 
@@ -490,7 +492,9 @@ COLLABORATOR
 
 Filtering an already paginated, unrestricted result in memory is not permitted because it would produce incorrect totals, unstable pages and possible metadata disclosure.
 
-If direct lookup finds a document that is not visible to the authenticated user, the application raises the same not-found outcome used for an unknown identifier. The HTTP response is `404 Not Found`, with the existing safe `Document not found` contract, so callers cannot distinguish a missing document from a concealed document.
+If direct lookup finds a document that is not visible to the authenticated user, the application raises the same not-found outcome used for an unknown identifier.
+
+The HTTP response is `404 Not Found`, with the existing safe `Document not found` contract, so callers cannot distinguish a missing document from a concealed document.
 
 ### Document listing contract
 
@@ -506,9 +510,59 @@ If direct lookup finds a document that is not visible to the authenticated user,
 }
 ```
 
-Page numbering is zero-based. The default page is `0`, the default size is `20`, and the maximum size is `100`. Negative page numbers, non-positive sizes and sizes above the maximum are rejected with `400 Bad Request`; invalid sizes are not silently clamped.
+Page numbering is zero-based.
 
-Results are ordered by `updatedAt DESC` and then `id ASC`. The identifier is the deterministic tie-breaker required for stable navigation between pages.
+The default page is `0`, the default size is `20`, and the maximum size is `100`.
+
+Negative page numbers, non-positive sizes and sizes above the maximum are rejected with `400 Bad Request`; invalid sizes are not silently clamped.
+
+Results are ordered by `updatedAt DESC` and then `id ASC`.
+
+The identifier is the deterministic tie-breaker required for stable navigation between pages.
+
+### Document edit policy
+
+Document editing is evaluated independently from document visibility.
+
+Metadata updates are allowed only while the document is in `DRAFT` status.
+
+The initial edit rules are:
+
+| Role | Own `DRAFT` | Other user's `DRAFT` | `IN_REVIEW` | `APPROVED` | `ARCHIVED` |
+|---|---:|---:|---:|---:|---:|
+| `ADMIN` | Yes | Yes | No | No | No |
+| `MANAGER` | Yes | Yes | No | No | No |
+| `COLLABORATOR` | Yes | No | No | No | No |
+
+The visibility policy is evaluated before the edit policy.
+
+If the authenticated user cannot view the document, the API returns `404 Not Found`, using the same safe response as an unknown document identifier.
+
+If the authenticated user can view the document but is not allowed to edit it, the API returns `403 Forbidden`.
+
+This distinction prevents document enumeration while preserving an explicit authorization response for resources already visible to the caller.
+
+`PATCH /api/v1/documents/{id}` currently allows partial updates to:
+
+- `title`;
+- `description`.
+
+The following fields cannot be modified through this operation:
+
+- document identifier;
+- status;
+- creator;
+- creation timestamp;
+- update timestamp.
+
+For PATCH semantics:
+
+- omitted fields remain unchanged;
+- `description: null` explicitly clears the description;
+- `title: null` is invalid;
+- blank titles are invalid;
+- titles longer than 255 characters are invalid;
+- an empty PATCH document is invalid.
 
 ---
 
@@ -535,7 +589,23 @@ Users must not access unauthorized documents
 RISK-001
 Unauthorized document access
       ↓
-Authorization enforced for every resource request
+Backend authorization enforced for every resource request
+```
+
+Document editing also addresses:
+
+```text
+BR-004
+Non-draft documents cannot be directly modified
+      ↓
+RISK-004
+Approved or protected document modification
+      ↓
+Visibility validation
+      ↓
+Edit authorization
+      ↓
+Lifecycle-state enforcement
 ```
 
 Frontend visibility rules must never replace backend authorization.
@@ -981,6 +1051,7 @@ Example:
 
 ```text
 Test needs:
+
 MANAGER
 +
 IN_REVIEW document
@@ -1334,7 +1405,7 @@ CI execution
 | RISK-001 Unauthorized document access | Backend authorization |
 | RISK-002 Unauthorized approval/rejection | Role-based backend authorization |
 | RISK-003 Invalid state transition | Domain-level lifecycle validation |
-| RISK-004 Approved document modification | Backend state validation |
+| RISK-004 Approved document modification | Backend state and edit-policy validation |
 | RISK-005 Incorrect audit history | Transactional audit persistence |
 | RISK-006 Duplicate identifiers | Database uniqueness constraint |
 | RISK-007 Invalid file upload | Backend file validation |

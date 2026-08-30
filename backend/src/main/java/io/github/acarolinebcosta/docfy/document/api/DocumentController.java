@@ -5,6 +5,7 @@ import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.auth.domain.UserRepository;
 import io.github.acarolinebcosta.docfy.document.application.CreateDocumentCommand;
 import io.github.acarolinebcosta.docfy.document.application.DocumentApplicationService;
+import io.github.acarolinebcosta.docfy.document.application.UpdateDocumentCommand;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import jakarta.validation.Valid;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,6 +72,30 @@ public class DocumentController {
                 .body(response);
     }
 
+    @PatchMapping("/{id}")
+    public ResponseEntity<DocumentResponse> update(
+            @PathVariable UUID id,
+            @RequestBody UpdateDocumentRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        validateUpdateRequest(request);
+
+        Document document = documentApplicationService.update(
+                id,
+                new UpdateDocumentCommand(
+                        request.getTitle(),
+                        request.isTitleProvided(),
+                        request.getDescription(),
+                        request.isDescriptionProvided()
+                ),
+                authenticatedUser(jwt)
+        );
+
+        return ResponseEntity.ok(
+                DocumentResponse.from(document)
+        );
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<DocumentResponse> getById(
             @PathVariable UUID id,
@@ -99,7 +125,9 @@ public class DocumentController {
                 size
         );
 
-        return ResponseEntity.ok(DocumentPageResponse.from(documents));
+        return ResponseEntity.ok(
+                DocumentPageResponse.from(documents)
+        );
     }
 
     private User authenticatedUser(Jwt jwt) {
@@ -110,7 +138,40 @@ public class DocumentController {
                 .orElseThrow(AuthenticationException::new);
     }
 
-    private void validatePagination(int page, int size) {
+    private void validateUpdateRequest(
+            UpdateDocumentRequest request
+    ) {
+        if (!request.hasAnyFieldProvided()) {
+            throw new BadRequestException(
+                    "At least one field must be provided"
+            );
+        }
+
+        if (request.isTitleProvided()) {
+            if (request.getTitle() == null) {
+                throw new BadRequestException(
+                        "Title must not be null"
+                );
+            }
+
+            if (request.getTitle().isBlank()) {
+                throw new BadRequestException(
+                        "Title must not be blank"
+                );
+            }
+
+            if (request.getTitle().length() > 255) {
+                throw new BadRequestException(
+                        "Title must not exceed 255 characters"
+                );
+            }
+        }
+    }
+
+    private void validatePagination(
+            int page,
+            int size
+    ) {
         if (page < MIN_PAGE_NUMBER) {
             throw new BadRequestException(
                     "Page must be greater than or equal to 0"

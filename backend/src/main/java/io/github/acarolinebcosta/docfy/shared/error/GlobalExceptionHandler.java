@@ -1,6 +1,7 @@
 package io.github.acarolinebcosta.docfy.shared.error;
 
 import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
+import io.github.acarolinebcosta.docfy.document.application.DocumentEditForbiddenException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentNotFoundException;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
@@ -24,6 +25,27 @@ public class GlobalExceptionHandler {
 
     private static final Logger LOGGER =
             LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(DocumentEditForbiddenException.class)
+    public ResponseEntity<ApiErrorResponse> handleDocumentEditForbiddenException(
+            DocumentEditForbiddenException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Document edit forbidden. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.FORBIDDEN,
+                "Forbidden",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiErrorResponse> handleBadRequest(

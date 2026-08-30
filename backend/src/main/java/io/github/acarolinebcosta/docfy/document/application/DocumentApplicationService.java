@@ -18,13 +18,16 @@ public class DocumentApplicationService {
 
     private final DocumentRepository documentRepository;
     private final DocumentVisibilityPolicy visibilityPolicy;
+    private final DocumentEditPolicy editPolicy;
 
     public DocumentApplicationService(
             DocumentRepository documentRepository,
-            DocumentVisibilityPolicy visibilityPolicy
+            DocumentVisibilityPolicy visibilityPolicy,
+            DocumentEditPolicy editPolicy
     ) {
         this.documentRepository = documentRepository;
         this.visibilityPolicy = visibilityPolicy;
+        this.editPolicy = editPolicy;
     }
 
     public Document create(
@@ -41,7 +44,10 @@ public class DocumentApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public Document getById(UUID documentId, User viewer) {
+    public Document getById(
+            UUID documentId,
+            User viewer
+    ) {
         Document document = documentRepository
                 .findById(documentId)
                 .orElseThrow(
@@ -51,6 +57,36 @@ public class DocumentApplicationService {
         if (!visibilityPolicy.canView(document, viewer)) {
             throw new DocumentNotFoundException(documentId);
         }
+
+        return document;
+    }
+
+    @Transactional
+    public Document update(
+            UUID documentId,
+            UpdateDocumentCommand command,
+            User editor
+    ) {
+        Document document = documentRepository
+                .findById(documentId)
+                .orElseThrow(
+                        () -> new DocumentNotFoundException(documentId)
+                );
+
+        if (!visibilityPolicy.canView(document, editor)) {
+            throw new DocumentNotFoundException(documentId);
+        }
+
+        if (!editPolicy.canEdit(document, editor)) {
+            throw new DocumentEditForbiddenException();
+        }
+
+        document.updateMetadata(
+                command.title(),
+                command.titleProvided(),
+                command.description(),
+                command.descriptionProvided()
+        );
 
         return document;
     }

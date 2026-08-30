@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,7 +36,8 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
-                        mock(DocumentVisibilityPolicy.class)
+                        mock(DocumentVisibilityPolicy.class),
+                        mock(DocumentEditPolicy.class)
                 );
 
         User user = new User(
@@ -99,7 +101,8 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
-                        visibilityPolicy
+                        visibilityPolicy,
+                        mock(DocumentEditPolicy.class)
                 );
         User user = new User(
                 "reader@docfy.local",
@@ -136,7 +139,8 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
-                        visibilityPolicy
+                        visibilityPolicy,
+                        mock(DocumentEditPolicy.class)
                 );
         User viewer = new User(
                 "viewer@docfy.local",
@@ -180,7 +184,8 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
-                        visibilityPolicy
+                        visibilityPolicy,
+                        mock(DocumentEditPolicy.class)
                 );
         User viewer = new User(
                 "missing-reader@docfy.local",
@@ -211,7 +216,8 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
-                        visibilityPolicy
+                        visibilityPolicy,
+                        mock(DocumentEditPolicy.class)
                 );
         User viewer = mockUser(Role.ADMIN);
         Page<Document> expected = new PageImpl<>(List.of());
@@ -238,7 +244,8 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
-                        visibilityPolicy
+                        visibilityPolicy,
+                        mock(DocumentEditPolicy.class)
                 );
         User viewer = mockUser(Role.COLLABORATOR);
         Page<Document> expected = new PageImpl<>(List.of());
@@ -265,6 +272,274 @@ class DocumentApplicationServiceTest {
         assertPageable(pageableCaptor.getValue(), 0, 20);
     }
 
+    @Test
+    void shouldUpdateTitleAndPreserveDescription() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentEditPolicy editPolicy =
+                mock(DocumentEditPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy,
+                        editPolicy
+                );
+        User editor = new User(
+                "editor@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        Document document = new Document(
+                "Old title",
+                "Original description",
+                editor
+        );
+        UUID documentId = UUID.fromString(
+                "44444444-4444-4444-4444-444444444444"
+        );
+
+        when(repository.findById(documentId))
+                .thenReturn(Optional.of(document));
+        when(visibilityPolicy.canView(document, editor))
+                .thenReturn(true);
+        when(editPolicy.canEdit(document, editor))
+                .thenReturn(true);
+
+        UpdateDocumentCommand command =
+                new UpdateDocumentCommand(
+                        "Updated title",
+                        true,
+                        null,
+                        false
+                );
+
+        Document result =
+                service.update(documentId, command, editor);
+
+        assertEquals("Updated title", result.getTitle());
+        assertEquals(
+                "Original description",
+                result.getDescription()
+        );
+
+        verify(repository).findById(documentId);
+        verify(visibilityPolicy).canView(document, editor);
+        verify(editPolicy).canEdit(document, editor);
+    }
+
+    @Test
+    void shouldClearDescriptionWhenNullIsExplicitlyProvided() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentEditPolicy editPolicy =
+                mock(DocumentEditPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy,
+                        editPolicy
+                );
+        User editor = new User(
+                "description-editor@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        Document document = new Document(
+                "Quality Strategy",
+                "Description to remove",
+                editor
+        );
+        UUID documentId = UUID.fromString(
+                "55555555-5555-5555-5555-555555555555"
+        );
+
+        when(repository.findById(documentId))
+                .thenReturn(Optional.of(document));
+        when(visibilityPolicy.canView(document, editor))
+                .thenReturn(true);
+        when(editPolicy.canEdit(document, editor))
+                .thenReturn(true);
+
+        UpdateDocumentCommand command =
+                new UpdateDocumentCommand(
+                        null,
+                        false,
+                        null,
+                        true
+                );
+
+        Document result =
+                service.update(documentId, command, editor);
+
+        assertEquals("Quality Strategy", result.getTitle());
+        assertNull(result.getDescription());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenEditorCannotViewDocument() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentEditPolicy editPolicy =
+                mock(DocumentEditPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy,
+                        editPolicy
+                );
+        User editor = new User(
+                "hidden-editor@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        User owner = new User(
+                "hidden-owner@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        Document document = new Document(
+                "Private draft",
+                "Private document",
+                owner
+        );
+        UUID documentId = UUID.fromString(
+                "66666666-6666-6666-6666-666666666666"
+        );
+
+        when(repository.findById(documentId))
+                .thenReturn(Optional.of(document));
+        when(visibilityPolicy.canView(document, editor))
+                .thenReturn(false);
+
+        assertThrows(
+                DocumentNotFoundException.class,
+                () -> service.update(
+                        documentId,
+                        new UpdateDocumentCommand(
+                                "Attempted update",
+                                true,
+                                null,
+                                false
+                        ),
+                        editor
+                )
+        );
+
+        verify(repository).findById(documentId);
+        verify(visibilityPolicy).canView(document, editor);
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenVisibleDocumentCannotBeEdited() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentEditPolicy editPolicy =
+                mock(DocumentEditPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy,
+                        editPolicy
+                );
+        User editor = new User(
+                "forbidden-editor@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        Document document = new Document(
+                "Approved document",
+                "Protected metadata",
+                editor
+        );
+        UUID documentId = UUID.fromString(
+                "77777777-7777-7777-7777-777777777777"
+        );
+
+        when(repository.findById(documentId))
+                .thenReturn(Optional.of(document));
+        when(visibilityPolicy.canView(document, editor))
+                .thenReturn(true);
+        when(editPolicy.canEdit(document, editor))
+                .thenReturn(false);
+
+        assertThrows(
+                DocumentEditForbiddenException.class,
+                () -> service.update(
+                        documentId,
+                        new UpdateDocumentCommand(
+                                "Attempted update",
+                                true,
+                                null,
+                                false
+                        ),
+                        editor
+                )
+        );
+
+        assertEquals(
+                "Approved document",
+                document.getTitle()
+        );
+        assertEquals(
+                "Protected metadata",
+                document.getDescription()
+        );
+
+        verify(visibilityPolicy).canView(document, editor);
+        verify(editPolicy).canEdit(document, editor);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenUpdatingMissingDocument() {
+        DocumentRepository repository =
+                mock(DocumentRepository.class);
+        DocumentVisibilityPolicy visibilityPolicy =
+                mock(DocumentVisibilityPolicy.class);
+        DocumentEditPolicy editPolicy =
+                mock(DocumentEditPolicy.class);
+        DocumentApplicationService service =
+                new DocumentApplicationService(
+                        repository,
+                        visibilityPolicy,
+                        editPolicy
+                );
+        User editor = new User(
+                "missing-editor@docfy.local",
+                "{bcrypt}encoded-password",
+                Role.COLLABORATOR
+        );
+        UUID documentId = UUID.fromString(
+                "88888888-8888-8888-8888-888888888888"
+        );
+
+        when(repository.findById(documentId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                DocumentNotFoundException.class,
+                () -> service.update(
+                        documentId,
+                        new UpdateDocumentCommand(
+                                "Updated title",
+                                true,
+                                null,
+                                false
+                        ),
+                        editor
+                )
+        );
+
+        verify(repository).findById(documentId);
+    }
+
     private void assertPageable(
             Pageable pageable,
             int expectedPage,
@@ -273,8 +548,10 @@ class DocumentApplicationServiceTest {
         assertEquals(expectedPage, pageable.getPageNumber());
         assertEquals(expectedSize, pageable.getPageSize());
 
-        Sort.Order updatedAt = pageable.getSort().getOrderFor("updatedAt");
-        Sort.Order id = pageable.getSort().getOrderFor("id");
+        Sort.Order updatedAt =
+                pageable.getSort().getOrderFor("updatedAt");
+        Sort.Order id =
+                pageable.getSort().getOrderFor("id");
 
         assertTrue(updatedAt != null && updatedAt.isDescending());
         assertTrue(id != null && id.isAscending());
