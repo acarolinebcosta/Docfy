@@ -1,5 +1,7 @@
 package io.github.acarolinebcosta.docfy.document.application;
 
+import io.github.acarolinebcosta.docfy.audit.application.DocumentAuditService;
+import io.github.acarolinebcosta.docfy.audit.domain.DocumentAuditAction;
 import io.github.acarolinebcosta.docfy.auth.domain.Role;
 import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
@@ -29,14 +31,8 @@ class DocumentWorkflowServiceTest {
     void shouldSubmitVisibleAuthorizedDraft() {
         Fixture fixture = fixture();
 
-        when(fixture.repository.findById(DOCUMENT_ID))
-                .thenReturn(Optional.of(fixture.document));
-        when(
-                fixture.visibilityPolicy.canView(
-                        fixture.document,
-                        fixture.actor
-                )
-        ).thenReturn(true);
+        allowVisibleDocument(fixture);
+
         when(
                 fixture.workflowPolicy.canSubmit(
                         fixture.document,
@@ -54,23 +50,18 @@ class DocumentWorkflowServiceTest {
                 result.getStatus()
         );
 
-        verify(fixture.repository)
-                .findById(DOCUMENT_ID);
-        verify(fixture.visibilityPolicy)
-                .canView(
-                        fixture.document,
-                        fixture.actor
-                );
-        verify(fixture.workflowPolicy)
-                .canSubmit(
-                        fixture.document,
-                        fixture.actor
-                );
+        verify(fixture.auditService).record(
+                fixture.document,
+                fixture.actor,
+                DocumentAuditAction.DOCUMENT_SUBMITTED,
+                DocumentStatus.DRAFT
+        );
     }
 
     @Test
     void shouldApproveVisibleAuthorizedDocumentInReview() {
         Fixture fixture = fixture();
+
         fixture.document.submitForReview();
 
         allowVisibleDocument(fixture);
@@ -90,11 +81,19 @@ class DocumentWorkflowServiceTest {
                 DocumentStatus.APPROVED,
                 result.getStatus()
         );
+
+        verify(fixture.auditService).record(
+                fixture.document,
+                fixture.actor,
+                DocumentAuditAction.DOCUMENT_APPROVED,
+                DocumentStatus.IN_REVIEW
+        );
     }
 
     @Test
     void shouldRejectVisibleAuthorizedDocumentInReview() {
         Fixture fixture = fixture();
+
         fixture.document.submitForReview();
 
         allowVisibleDocument(fixture);
@@ -113,6 +112,13 @@ class DocumentWorkflowServiceTest {
         assertEquals(
                 DocumentStatus.DRAFT,
                 result.getStatus()
+        );
+
+        verify(fixture.auditService).record(
+                fixture.document,
+                fixture.actor,
+                DocumentAuditAction.DOCUMENT_REJECTED,
+                DocumentStatus.IN_REVIEW
         );
     }
 
@@ -140,6 +146,13 @@ class DocumentWorkflowServiceTest {
                 DocumentStatus.ARCHIVED,
                 result.getStatus()
         );
+
+        verify(fixture.auditService).record(
+                fixture.document,
+                fixture.actor,
+                DocumentAuditAction.DOCUMENT_ARCHIVED,
+                DocumentStatus.APPROVED
+        );
     }
 
     @Test
@@ -159,7 +172,8 @@ class DocumentWorkflowServiceTest {
 
         verifyNoInteractions(
                 fixture.visibilityPolicy,
-                fixture.workflowPolicy
+                fixture.workflowPolicy,
+                fixture.auditService
         );
     }
 
@@ -185,7 +199,10 @@ class DocumentWorkflowServiceTest {
                 )
         );
 
-        verifyNoInteractions(fixture.workflowPolicy);
+        verifyNoInteractions(
+                fixture.workflowPolicy,
+                fixture.auditService
+        );
 
         assertEquals(
                 DocumentStatus.DRAFT,
@@ -218,11 +235,14 @@ class DocumentWorkflowServiceTest {
                 DocumentStatus.DRAFT,
                 fixture.document.getStatus()
         );
+
+        verifyNoInteractions(fixture.auditService);
     }
 
     @Test
     void shouldReturnForbiddenWhenActorCannotApprove() {
         Fixture fixture = fixture();
+
         fixture.document.submitForReview();
 
         allowVisibleDocument(fixture);
@@ -245,11 +265,14 @@ class DocumentWorkflowServiceTest {
                 DocumentStatus.IN_REVIEW,
                 fixture.document.getStatus()
         );
+
+        verifyNoInteractions(fixture.auditService);
     }
 
     @Test
     void shouldReturnForbiddenWhenActorCannotReject() {
         Fixture fixture = fixture();
+
         fixture.document.submitForReview();
 
         allowVisibleDocument(fixture);
@@ -272,6 +295,8 @@ class DocumentWorkflowServiceTest {
                 DocumentStatus.IN_REVIEW,
                 fixture.document.getStatus()
         );
+
+        verifyNoInteractions(fixture.auditService);
     }
 
     @Test
@@ -301,10 +326,12 @@ class DocumentWorkflowServiceTest {
                 DocumentStatus.APPROVED,
                 fixture.document.getStatus()
         );
+
+        verifyNoInteractions(fixture.auditService);
     }
 
     @Test
-    void shouldPropagateInvalidLifecycleTransition() {
+    void shouldNotAuditInvalidLifecycleTransition() {
         Fixture fixture = fixture();
 
         allowVisibleDocument(fixture);
@@ -327,6 +354,8 @@ class DocumentWorkflowServiceTest {
                 DocumentStatus.DRAFT,
                 fixture.document.getStatus()
         );
+
+        verifyNoInteractions(fixture.auditService);
     }
 
     private void allowVisibleDocument(Fixture fixture) {
@@ -351,11 +380,15 @@ class DocumentWorkflowServiceTest {
         DocumentWorkflowPolicy workflowPolicy =
                 mock(DocumentWorkflowPolicy.class);
 
+        DocumentAuditService auditService =
+                mock(DocumentAuditService.class);
+
         DocumentWorkflowService service =
                 new DocumentWorkflowService(
                         repository,
                         visibilityPolicy,
-                        workflowPolicy
+                        workflowPolicy,
+                        auditService
                 );
 
         User actor = new User(
@@ -374,6 +407,7 @@ class DocumentWorkflowServiceTest {
                 repository,
                 visibilityPolicy,
                 workflowPolicy,
+                auditService,
                 service,
                 actor,
                 document
@@ -384,6 +418,7 @@ class DocumentWorkflowServiceTest {
             DocumentRepository repository,
             DocumentVisibilityPolicy visibilityPolicy,
             DocumentWorkflowPolicy workflowPolicy,
+            DocumentAuditService auditService,
             DocumentWorkflowService service,
             User actor,
             Document document

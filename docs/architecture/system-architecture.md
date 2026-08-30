@@ -340,6 +340,7 @@ POST  /api/v1/documents/{id}/submit
 POST  /api/v1/documents/{id}/approve
 POST  /api/v1/documents/{id}/reject
 POST  /api/v1/documents/{id}/archive
+GET   /api/v1/documents/{id}/audit
 ```
 
 The final API structure may evolve during implementation.
@@ -467,7 +468,7 @@ Example permission model:
 | Reject document | No | Yes | Yes |
 | Archive approved document | No | Yes | Yes |
 | Manage users | No | No | Yes |
-| View audit information | Limited | Yes | Yes |
+| View audit information | No | Yes | Yes |
 
 The final permission model may evolve.
 
@@ -752,82 +753,88 @@ This addresses:
 ```text
 RISK-003 — Invalid document state transition
 ```
+
 ---
 
 ## 20. Transactional Workflow
 
-Operations that change the document lifecycle and generate audit information must be transactional.
+Document lifecycle transitions and audit persistence execute inside the same application transaction.
 
-Example:
+The implemented flow is:
 
 ```text
-Approve document
+Workflow request
        ↓
-Validate permission
+Load document
        ↓
-Validate current state
+Validate visibility
        ↓
-Change document status
+Validate action authorization
+       ↓
+Capture previous status
+       ↓
+Apply domain lifecycle transition
        ↓
 Create audit event
+       ↓
+Persist audit event
        ↓
 Commit transaction
 ```
 
-If audit persistence fails:
-
-```text
-Change status
-      ↓
-Audit fails
-      ↓
-ROLLBACK
-```
-
-The system should not persist:
-
-```text
-Document = APPROVED
-Audit = missing
-```
-
-This directly addresses:
-
-```text
-RISK-012 — Partial update during failure
-```
+If audit persistence fails, the workflow transaction rolls back both the document status change and the audit write. The system must not commit a lifecycle transition without its corresponding event. This directly addresses `RISK-012 — Partial update during failure`.
 
 ---
 
 ## 21. Audit Architecture
 
-Relevant actions should generate audit events.
+Every successful document lifecycle transition creates an immutable audit event in the same transaction as the status change.
 
-Initial audit information includes:
+The `document_audit_events` table stores:
 
-- actor;
-- action;
-- timestamp;
 - document identifier;
+- actor identifier;
+- action;
 - previous status;
 - new status;
-- correlation ID where applicable.
+- occurrence timestamp;
+- correlation ID when available.
+
+The implemented audit actions are:
+
+```text
+DOCUMENT_SUBMITTED
+DOCUMENT_APPROVED
+DOCUMENT_REJECTED
+DOCUMENT_ARCHIVED
+```
+
+The workflow application service captures the previous status, applies the domain transition and delegates event persistence to the audit service. Audit events are append-only through product operations; no update or delete endpoint is exposed.
+
+Audit history is available through:
+
+```text
+GET /api/v1/documents/{id}/audit
+```
+
+Events are returned in ascending occurrence order, with the event identifier as a deterministic tie-breaker. `ADMIN` and `MANAGER` can read audit history. `COLLABORATOR` receives `403 Forbidden` for a visible document. A missing or concealed document produces the same `404 Not Found` response used by document lookup.
 
 Example:
 
 ```json
 {
-  "documentId": "DOC-1024",
+  "id": "c15a5154-cc3e-4592-b529-ab2910bd5c06",
+  "documentId": "898636bf-90ff-4a4f-b1e9-66115ef6dba2",
+  "actorId": "4d6935fb-22f9-4e62-bf53-b259cacb1951",
   "action": "DOCUMENT_APPROVED",
-  "actor": "manager@example.com",
   "previousStatus": "IN_REVIEW",
   "newStatus": "APPROVED",
-  "timestamp": "2026-08-22T18:00:00Z",
-  "correlationId": "a82f19"
+  "occurredAt": "2026-08-22T18:00:00Z",
+  "correlationId": "a82f19dc-d9e0-4698-bc73-dd50b7445a76"
 }
 ```
 
-Audit information should be immutable through normal product operations.
+The correlation ID connects the lifecycle request, structured logs and the persisted evidence without exposing credentials or other sensitive user data.
 
 ---
 
