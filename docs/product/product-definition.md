@@ -219,7 +219,13 @@ Authorized users must be able to create documents.
 
 ### FR-003 — Document Editing
 
-Users must be able to edit documents while they are in `DRAFT` status and they have permission to modify them.
+Documents may be edited only while they are in `DRAFT` status.
+
+`ADMIN` and `MANAGER` users may edit any draft document.
+
+`COLLABORATOR` users may edit only draft documents they created.
+
+The metadata update operation must support partial modification of title and description without allowing clients to modify lifecycle status, ownership or system-managed metadata.
 
 ### FR-004 — Document Submission
 
@@ -277,9 +283,15 @@ A document must contain at least:
 
 Only users with `MANAGER` or `ADMIN` roles can approve or reject documents.
 
-### BR-004 — Approved Document Modification
+### BR-004 — Non-Draft Document Modification
 
-Approved documents cannot be directly modified.
+Document metadata cannot be directly modified while the document is in `IN_REVIEW`, `APPROVED` or `ARCHIVED` status.
+
+Only `DRAFT` documents can be edited.
+
+`ADMIN` and `MANAGER` may edit any document while it remains in `DRAFT`.
+
+`COLLABORATOR` may edit only their own `DRAFT` documents.
 
 Changes to an approved document must create a new version in a future version of the product.
 
@@ -320,7 +332,20 @@ Document read access must follow these rules:
 
 The same visibility policy must be applied to direct lookup, listing and search. Authorization filtering must occur before pagination or result disclosure.
 
+Document edit authorization is evaluated independently from read visibility.
+
+For metadata updates:
+
+* `ADMIN` and `MANAGER` can edit any `DRAFT` document;
+* `COLLABORATOR` can edit only `DRAFT` documents they created;
+* documents in `IN_REVIEW`, `APPROVED` or `ARCHIVED` status cannot be edited directly by any role;
+* if the authenticated user cannot view the target document, the API must return the same `404 Not Found` response used for a nonexistent document;
+* if the authenticated user can view the target document but cannot edit it, the API must return `403 Forbidden`.
+
+This distinction protects against document enumeration while preserving explicit authorization semantics for resources already visible to the user.
+
 ---
+
 
 ## 10. Main User Flows
 

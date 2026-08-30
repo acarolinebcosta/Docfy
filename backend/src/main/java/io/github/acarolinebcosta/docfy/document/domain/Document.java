@@ -73,6 +73,21 @@ public class Document {
         updatedAt = Instant.now();
     }
 
+    public void updateMetadata(
+        String title,
+        boolean updateTitle,
+        String description,
+        boolean updateDescription
+    ) {
+    if (updateTitle) {
+        this.title = title;
+    }
+
+    if (updateDescription) {
+        this.description = description;
+    }
+   }
+
     public UUID getId() {
         return id;
     }
