@@ -1,0 +1,4 @@
+docfy:
+  development:
+    seed:
+      password: ${DOCFY_DEV_SEED_PASSWORD:}
