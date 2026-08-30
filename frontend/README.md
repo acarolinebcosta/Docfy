@@ -1,32 +1,56 @@
-# React + TypeScript + Vite
+# Docfy Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Frontend oficial do Docfy, integrado à API Spring Boot do projeto.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- Vitest
+- React Testing Library
+- MSW
 
-## React Compiler
+## Architecture
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```text
+React
+  ↓ relative /api requests
+Vite development proxy
+  ↓
+Spring Boot
+  ↓
+PostgreSQL
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+O backend é a fonte de verdade para dados, autenticação e autorização. O frontend usa autenticação JWT real e interpreta claims somente para melhorar a experiência; todas as decisões de segurança continuam no backend. O MSW é utilizado exclusivamente nos testes automatizados. Não existe banco, seed ou backend simulado no runtime.
+
+## Requirements
+
+- Node.js 24 LTS
+- npm
+- backend do Docfy em execução para uso local
+
+## Install
+
+```bash
+npm ci
+```
+
+## Run
+
+```bash
+npm run dev
+```
+
+Em desenvolvimento, as requisições relativas para `/api` são encaminhadas pelo proxy do Vite ao backend local. Inicie PostgreSQL e Spring Boot conforme as instruções do repositório antes de testar os fluxos reais. A massa local opcional está descrita em [`docs/development/development-seed.md`](../docs/development/development-seed.md).
+
+## Validation
+
+```bash
+npm run lint
+npm test
+npm run build
+```
