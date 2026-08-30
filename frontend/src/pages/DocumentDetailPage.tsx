@@ -74,6 +74,32 @@ const AUDIT_ACTION_LABELS: Record<DocumentAuditAction, string> = {
 
 export function DocumentDetailPage() {
   const { id: documentId } = useParams();
+
+  if (!documentId) {
+    return (
+      <AppShell>
+        <ApiErrorState
+          title="Documento inválido"
+          message="O identificador do documento não foi informado."
+          secondaryAction={backToDocumentsButton()}
+        />
+      </AppShell>
+    );
+  }
+
+  return (
+    <DocumentDetailContent
+      key={documentId}
+      documentId={documentId}
+    />
+  );
+}
+
+function DocumentDetailContent({
+  documentId,
+}: {
+  documentId: string;
+}) {
   const location = useLocation();
   const { user, accessToken, logout } = useAuth();
 
@@ -215,6 +241,10 @@ export function DocumentDetailPage() {
   );
 
   async function handleWorkflow(action: DocumentWorkflowAction) {
+    if (isEditing) {
+      return;
+    }
+
     if (!accessToken || !document) {
       logout();
       return;
@@ -241,6 +271,7 @@ export function DocumentDetailPage() {
       });
 
       setDocument(updated);
+      setIsEditing(false);
       setNotice(`${WORKFLOW_LABELS[action]} concluído com sucesso.`);
       setAuditReloadKey((current) => current + 1);
     } catch (caughtError) {
@@ -269,18 +300,6 @@ export function DocumentDetailPage() {
     setIsEditing(false);
     setActionError(null);
     setNotice("Documento atualizado com sucesso.");
-  }
-
-  if (!documentId) {
-    return (
-      <AppShell>
-        <ApiErrorState
-          title="Documento inválido"
-          message="O identificador do documento não foi informado."
-          secondaryAction={backToDocumentsButton()}
-        />
-      </AppShell>
-    );
   }
 
   return (
@@ -379,7 +398,7 @@ export function DocumentDetailPage() {
               </dl>
             </section>
 
-            {isEditing ? (
+            {isEditing && canEdit ? (
               <DocumentEditForm
                 document={document}
                 accessToken={accessToken}
@@ -400,7 +419,11 @@ export function DocumentDetailPage() {
                   </p>
                 </div>
 
-                {workflowActions.length > 0 ? (
+                {isEditing ? (
+                  <p className="text-sm text-muted-foreground">
+                    Conclua ou cancele a edição para executar uma ação de fluxo.
+                  </p>
+                ) : workflowActions.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {workflowActions.map((action) => (
                       <WorkflowButton
@@ -533,6 +556,7 @@ function DocumentEditForm({
 
   return (
     <form
+      aria-label="Editar documento"
       onSubmit={handleSubmit}
       className="space-y-5 rounded-xl border border-primary/20 bg-card p-6 shadow-sm"
     >

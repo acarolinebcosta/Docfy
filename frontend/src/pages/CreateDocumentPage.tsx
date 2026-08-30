@@ -108,6 +108,7 @@ export function CreateDocumentPage() {
         />
 
         <form
+          aria-label="Criar documento"
           onSubmit={handleSubmit}
           className="space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm"
         >
