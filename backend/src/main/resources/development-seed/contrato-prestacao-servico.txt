@@ -5,4 +5,3 @@ Documento sintetico para demonstracao do laboratorio Docfy.
 Objeto: prestacao ficticia de servicos de revisao documental.
 Vigencia: exemplo sem valor juridico.
 Partes: identidades inteiramente ficticias.
-

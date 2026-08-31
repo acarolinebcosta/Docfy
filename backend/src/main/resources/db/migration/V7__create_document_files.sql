@@ -18,4 +18,3 @@ CREATE TABLE document_files (
 
 CREATE INDEX idx_document_files_document
     ON document_files(document_id, uploaded_at, id);
-

@@ -6,4 +6,3 @@ public class FileStorageException extends RuntimeException {
         super(message, cause);
     }
 }
-

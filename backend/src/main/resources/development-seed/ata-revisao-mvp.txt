@@ -9,4 +9,3 @@ Pauta:
 - registrar decisoes para a demonstracao.
 
 Resultado: escopo funcional aprovado para validacao interna.
-

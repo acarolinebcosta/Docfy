@@ -7,4 +7,3 @@ public record DownloadedDocumentFile(
         byte[] content
 ) {
 }
-

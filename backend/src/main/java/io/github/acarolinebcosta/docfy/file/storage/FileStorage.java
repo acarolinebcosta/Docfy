@@ -8,4 +8,3 @@ public interface FileStorage {
 
     void delete(String storageKey);
 }
-

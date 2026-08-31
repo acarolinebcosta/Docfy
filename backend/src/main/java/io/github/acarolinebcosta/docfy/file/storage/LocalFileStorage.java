@@ -73,4 +73,3 @@ public class LocalFileStorage implements FileStorage {
         return resolved;
     }
 }
-
