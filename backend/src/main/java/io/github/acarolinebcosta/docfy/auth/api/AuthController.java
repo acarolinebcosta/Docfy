@@ -4,6 +4,8 @@ import io.github.acarolinebcosta.docfy.auth.application.AuthenticationService;
 import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.auth.security.JwtProperties;
 import io.github.acarolinebcosta.docfy.auth.security.JwtTokenService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@Tag(name = "Authentication")
 public class AuthController {
 
     private final AuthenticationService authenticationService;
@@ -30,6 +33,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Authenticate with email and password")
     public ResponseEntity<LoginResponse> login(
             @Valid @RequestBody LoginRequest request
     ) {

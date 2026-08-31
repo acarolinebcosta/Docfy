@@ -26,9 +26,14 @@ export function documentFixture(
 ): Document {
   return {
     id: DOCUMENT_A_ID,
+    documentCode: "DOC-000001",
     title: "Quality Policy",
     description: "Policy description",
     status: "DRAFT",
+    category: {
+      id: "11111111-0000-0000-0000-000000000007",
+      name: "Other",
+    },
     createdBy: OWNER_ID,
     createdAt: "2026-08-30T12:00:00Z",
     updatedAt: "2026-08-30T13:00:00Z",

@@ -3,16 +3,20 @@ import {
   ChevronRight,
   FileText,
   Plus,
+  Search,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
   useState,
+  type FormEvent,
 } from "react";
 import { Link } from "react-router-dom";
 
 import { ApiError } from "@/api/client";
-import { listDocuments } from "@/api/documents";
+import { listCategories, listDocuments } from "@/api/documents";
 import { useAuth } from "@/auth/useAuth";
 import { ApiErrorState } from "@/components/api-error-state";
 import { AppShell } from "@/components/app-shell";
@@ -20,8 +24,15 @@ import { DocumentStatusBadge } from "@/components/document-status-badge";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatDateTime } from "@/lib/date";
-import type { DocumentPage } from "@/types/document";
+import { DOCUMENT_STATUS_LABELS } from "@/lib/document-status";
+import type {
+  Category,
+  DocumentPage,
+  DocumentStatus,
+} from "@/types/document";
 
 const PAGE_SIZE = 20;
 
@@ -37,6 +48,14 @@ export function DocumentsPage() {
   } = useAuth();
 
   const [page, setPage] = useState(0);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [status, setStatus] = useState<DocumentStatus | "">("");
+  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [categoriesError, setCategoriesError] =
+    useState<PageError | null>(null);
+  const [categoriesReloadKey, setCategoriesReloadKey] = useState(0);
   const [documents, setDocuments] =
     useState<DocumentPage | null>(null);
   const [isLoading, setIsLoading] =
@@ -49,6 +68,66 @@ export function DocumentsPage() {
   const retry = useCallback(() => {
     setReloadKey((current) => current + 1);
   }, []);
+
+  const hasActiveFilters = Boolean(search || categoryId || status);
+
+  function applySearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPage(0);
+    setSearch(searchInput.trim());
+  }
+
+  function clearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setCategoryId("");
+    setStatus("");
+    setPage(0);
+  }
+
+  useEffect(() => {
+    const token = accessToken;
+
+    if (!token) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadAvailableCategories(authToken: string) {
+      setCategoriesError(null);
+
+      try {
+        setCategories(
+          await listCategories({
+            accessToken: authToken,
+            signal: controller.signal,
+          }),
+        );
+      } catch (caughtError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (caughtError instanceof ApiError && caughtError.status === 401) {
+          logout();
+          return;
+        }
+
+        setCategoriesError({
+          message: "Não foi possível carregar as categorias.",
+          correlationId:
+            caughtError instanceof ApiError
+              ? caughtError.correlationId
+              : undefined,
+        });
+      }
+    }
+
+    void loadAvailableCategories(token);
+
+    return () => controller.abort();
+  }, [accessToken, categoriesReloadKey, logout]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -67,6 +146,9 @@ export function DocumentsPage() {
           accessToken: token,
           page,
           size: PAGE_SIZE,
+          search,
+          categoryId,
+          status: status || undefined,
           signal: controller.signal,
         });
 
@@ -106,7 +188,7 @@ export function DocumentsPage() {
     return () => {
       controller.abort();
     };
-  }, [accessToken, logout, page, reloadKey]);
+  }, [accessToken, categoryId, logout, page, reloadKey, search, status]);
 
   return (
     <AppShell>
@@ -123,6 +205,118 @@ export function DocumentsPage() {
             </Button>
           }
         />
+
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <SlidersHorizontal className="size-4 text-primary" />
+            <h2 className="font-semibold text-foreground">
+              Pesquisa e filtros
+            </h2>
+          </div>
+
+          <form
+            aria-label="Pesquisar e filtrar documentos"
+            onSubmit={applySearch}
+            className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.6fr)_minmax(12rem,0.5fr)_auto]"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="document-search">Título ou código</Label>
+              <Input
+                id="document-search"
+                type="search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Ex.: Política ou DOC-000001"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="document-category-filter">Categoria</Label>
+              <select
+                id="document-category-filter"
+                value={categoryId}
+                onChange={(event) => {
+                  setCategoryId(event.target.value);
+                  setPage(0);
+                }}
+                disabled={!categories || Boolean(categoriesError)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">Todas</option>
+                {categories?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="document-status-filter">Status</Label>
+              <select
+                id="document-status-filter"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value as DocumentStatus | "");
+                  setPage(0);
+                }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              >
+                <option value="">Todos</option>
+                {Object.entries(DOCUMENT_STATUS_LABELS).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <Button type="submit">
+                <Search />
+                Buscar
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                aria-label="Limpar campos de pesquisa e filtros"
+                disabled={!hasActiveFilters && !searchInput}
+                onClick={clearFilters}
+              >
+                <X />
+              </Button>
+            </div>
+          </form>
+
+          {categoriesError ? (
+            <div
+              role="alert"
+              className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+            >
+              <p className="text-sm text-destructive">
+                {categoriesError.message}
+              </p>
+              {categoriesError.correlationId ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Código de rastreio: {categoriesError.correlationId}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() =>
+                  setCategoriesReloadKey((current) => current + 1)
+                }
+              >
+                Tentar novamente
+              </Button>
+            </div>
+          ) : null}
+        </section>
 
         <section
           aria-busy={isLoading}
@@ -145,14 +339,24 @@ export function DocumentsPage() {
             <EmptyState
               icon={<FileText className="size-5" />}
               title="Nenhum documento encontrado"
-              description="Quando um documento estiver disponível para o seu perfil, ele aparecerá aqui."
+              description={
+                hasActiveFilters
+                  ? "Nenhum documento visível corresponde aos critérios informados."
+                  : "Quando um documento estiver disponível para o seu perfil, ele aparecerá aqui."
+              }
               action={
-                <Button asChild>
-                  <Link to="/documents/new">
-                    <Plus />
-                    Criar documento
-                  </Link>
-                </Button>
+                hasActiveFilters ? (
+                  <Button variant="outline" onClick={clearFilters}>
+                    Limpar filtros
+                  </Button>
+                ) : (
+                  <Button asChild>
+                    <Link to="/documents/new">
+                      <Plus />
+                      Criar documento
+                    </Link>
+                  </Button>
+                )
               }
             />
           ) : null}
@@ -179,6 +383,12 @@ export function DocumentsPage() {
                         scope="col"
                         className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                       >
+                        Categoria
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
                         Atualizado em
                       </th>
                     </tr>
@@ -191,6 +401,9 @@ export function DocumentsPage() {
                         className="transition-colors hover:bg-muted/30"
                       >
                         <td className="max-w-xl px-5 py-4">
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                            {document.documentCode}
+                          </p>
                           <Link
                             to={`/documents/${document.id}`}
                             className="font-medium text-foreground hover:text-primary hover:underline"
@@ -203,6 +416,9 @@ export function DocumentsPage() {
                         </td>
                         <td className="px-5 py-4">
                           <DocumentStatusBadge status={document.status} />
+                        </td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground">
+                          {document.category.name}
                         </td>
                         <td className="whitespace-nowrap px-5 py-4 text-sm text-muted-foreground">
                           {formatDateTime(document.updatedAt)}

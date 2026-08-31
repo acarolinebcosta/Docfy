@@ -5,9 +5,14 @@ import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.auth.domain.UserRepository;
 import io.github.acarolinebcosta.docfy.document.application.CreateDocumentCommand;
 import io.github.acarolinebcosta.docfy.document.application.DocumentApplicationService;
+import io.github.acarolinebcosta.docfy.document.application.DocumentListCriteria;
 import io.github.acarolinebcosta.docfy.document.application.UpdateDocumentCommand;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
+import io.github.acarolinebcosta.docfy.document.domain.DocumentStatus;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
+import io.github.acarolinebcosta.docfy.shared.openapi.OpenApiConfig;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -23,10 +28,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.Locale;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/documents")
+@Tag(name = "Documents")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class DocumentController {
 
     private static final String DEFAULT_PAGE_NUMBER = "0";
@@ -55,7 +63,8 @@ public class DocumentController {
         Document document = documentApplicationService.create(
                 new CreateDocumentCommand(
                         request.title(),
-                        request.description()
+                        request.description(),
+                        request.categoryId()
                 ),
                 createdBy
         );
@@ -86,7 +95,9 @@ public class DocumentController {
                         request.getTitle(),
                         request.isTitleProvided(),
                         request.getDescription(),
-                        request.isDescriptionProvided()
+                        request.isDescriptionProvided(),
+                        request.getCategoryId(),
+                        request.isCategoryProvided()
                 ),
                 authenticatedUser(jwt)
         );
@@ -115,6 +126,9 @@ public class DocumentController {
     public ResponseEntity<DocumentPageResponse> list(
             @RequestParam(defaultValue = DEFAULT_PAGE_NUMBER) int page,
             @RequestParam(defaultValue = DEFAULT_PAGE_SIZE) int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String categoryId,
+            @RequestParam(required = false) String status,
             @AuthenticationPrincipal Jwt jwt
     ) {
         validatePagination(page, size);
@@ -122,7 +136,12 @@ public class DocumentController {
         Page<Document> documents = documentApplicationService.listVisible(
                 authenticatedUser(jwt),
                 page,
-                size
+                size,
+                new DocumentListCriteria(
+                        search,
+                        parseCategoryId(categoryId),
+                        parseStatus(status)
+                )
         );
 
         return ResponseEntity.ok(
@@ -166,6 +185,13 @@ public class DocumentController {
                 );
             }
         }
+
+        if (request.isCategoryProvided()
+                && request.getCategoryId() == null) {
+            throw new BadRequestException(
+                    "Category must not be null"
+            );
+        }
     }
 
     private void validatePagination(
@@ -181,6 +207,36 @@ public class DocumentController {
         if (size <= 0 || size > MAX_PAGE_SIZE) {
             throw new BadRequestException(
                     "Size must be between 1 and " + MAX_PAGE_SIZE
+            );
+        }
+    }
+
+    private UUID parseCategoryId(String categoryId) {
+        if (categoryId == null || categoryId.isBlank()) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(categoryId.trim());
+        } catch (IllegalArgumentException exception) {
+            throw new BadRequestException(
+                    "Category filter must be a valid UUID"
+            );
+        }
+    }
+
+    private DocumentStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+
+        try {
+            return DocumentStatus.valueOf(
+                    status.trim().toUpperCase(Locale.ROOT)
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new BadRequestException(
+                    "Invalid document status filter"
             );
         }
     }

@@ -15,6 +15,11 @@ spring:
   flyway:
     enabled: true
 
+  servlet:
+    multipart:
+      max-file-size: ${DOCFY_FILE_REQUEST_MAX_SIZE:11MB}
+      max-request-size: ${DOCFY_FILE_REQUEST_MAX_SIZE:11MB}
+
 management:
   endpoints:
     web:
@@ -26,6 +31,10 @@ management:
       show-details: never
 
 docfy:
+  files:
+    storage-location: ${DOCFY_FILE_STORAGE_PATH:./data/files}
+    max-size: ${DOCFY_FILE_MAX_SIZE:10MB}
+
   security:
     jwt:
       secret: ${JWT_SECRET}

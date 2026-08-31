@@ -22,12 +22,15 @@ import { createTestToken } from "@/test/token";
 import type { Document } from "@/types/document";
 
 const STORAGE_KEY = "docfy.accessToken";
+const CATEGORY_ID = "11111111-0000-0000-0000-000000000003";
 
 const createdDocument: Document = {
   id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  documentCode: "DOC-000001",
   title: "Quality Policy",
   description: "Policy description",
   status: "DRAFT",
+  category: { id: CATEGORY_ID, name: "Contract" },
   createdBy: "11111111-1111-1111-1111-111111111111",
   createdAt: "2026-08-30T12:00:00Z",
   updatedAt: "2026-08-30T12:00:00Z",
@@ -47,6 +50,11 @@ function CreatedDocumentTarget() {
 }
 
 function renderCreatePage() {
+  server.use(
+    http.get("*/api/v1/categories", () =>
+      HttpResponse.json([{ id: CATEGORY_ID, name: "Contract" }]),
+    ),
+  );
   sessionStorage.setItem(STORAGE_KEY, createTestToken());
 
   return render(
@@ -70,6 +78,11 @@ function renderCreatePage() {
   );
 }
 
+async function selectCategory(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole("option", { name: "Contract" });
+  await user.selectOptions(screen.getByLabelText("Categoria"), CATEGORY_ID);
+}
+
 describe("CreateDocumentPage", () => {
   it("renders the creation form with accessible fields", () => {
     renderCreatePage();
@@ -78,6 +91,7 @@ describe("CreateDocumentPage", () => {
       screen.getByRole("heading", { name: "Novo documento" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Título")).toBeRequired();
+    expect(screen.getByLabelText("Categoria")).toBeRequired();
     expect(screen.getByLabelText(/Descrição/)).toBeInTheDocument();
   });
 
@@ -92,6 +106,7 @@ describe("CreateDocumentPage", () => {
 
     const user = userEvent.setup();
     renderCreatePage();
+    await selectCategory(user);
     await user.type(screen.getByLabelText("Título"), "   ");
     await user.click(
       screen.getByRole("button", { name: "Criar rascunho" }),
@@ -126,6 +141,7 @@ describe("CreateDocumentPage", () => {
         expect(await request.json()).toEqual({
           title: "Quality Policy",
           description: "Policy description",
+          categoryId: CATEGORY_ID,
         });
         return HttpResponse.json(createdDocument, { status: 201 });
       }),
@@ -141,6 +157,7 @@ describe("CreateDocumentPage", () => {
       screen.getByLabelText(/Descrição/),
       "  Policy description  ",
     );
+    await selectCategory(user);
     await user.click(
       screen.getByRole("button", { name: "Criar rascunho" }),
     );
@@ -172,6 +189,7 @@ describe("CreateDocumentPage", () => {
     const user = userEvent.setup();
     renderCreatePage();
     await user.type(screen.getByLabelText("Título"), "Policy");
+    await selectCategory(user);
     await user.click(
       screen.getByRole("button", { name: "Criar rascunho" }),
     );
@@ -194,6 +212,7 @@ describe("CreateDocumentPage", () => {
     const user = userEvent.setup();
     renderCreatePage();
     await user.type(screen.getByLabelText("Título"), "Policy");
+    await selectCategory(user);
     await user.click(
       screen.getByRole("button", { name: "Criar rascunho" }),
     );
@@ -219,6 +238,7 @@ describe("CreateDocumentPage", () => {
     const user = userEvent.setup();
     renderCreatePage();
     await user.type(screen.getByLabelText("Título"), "Policy");
+    await selectCategory(user);
     await user.click(
       screen.getByRole("button", { name: "Criar rascunho" }),
     );

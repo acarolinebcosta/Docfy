@@ -38,16 +38,21 @@ application fails safely instead of silently overwriting that identity.
 
 ## Documents
 
-| Owner | Title | Initial status |
-|---|---|---|
-| Ana | Quality Policy | `DRAFT` |
-| Ana | Information Security Policy | `IN_REVIEW` |
-| Ana | Software Release Checklist | `APPROVED` |
-| Ana | Operational Procedure | `ARCHIVED` |
-| João | Architecture Guidelines | `DRAFT` |
-| João | Incident Response Procedure | `IN_REVIEW` |
-| João | Supplier Agreement | `APPROVED` |
-| João | Meeting Minutes | `ARCHIVED` |
+| Owner | Title | Category | Initial status |
+|---|---|---|---|
+| Ana | Quality Policy | Regulation | `DRAFT` |
+| Ana | Information Security Policy | Regulation | `IN_REVIEW` |
+| Ana | Software Release Checklist | Other | `APPROVED` |
+| Ana | Operational Procedure | Other | `ARCHIVED` |
+| João | Architecture Guidelines | Other | `DRAFT` |
+| João | Incident Response Procedure | Notice | `IN_REVIEW` |
+| João | Supplier Agreement | Contract | `APPROVED` |
+| João | Meeting Minutes | Meeting Minutes | `ARCHIVED` |
+| Ana | Ata de Revisão do MVP | Meeting Minutes | `APPROVED` |
+| Ana | Certificado de Treinamento | Certificate | `DRAFT` |
+| João | Comunicado de Manutenção | Notice | `IN_REVIEW` |
+| João | Contrato de Prestação de Serviço | Contract | `DRAFT` |
+| João | Ofício de Governança | Official Letter | `APPROVED` |
 
 Advanced states are reached through the normal workflow services. The
 Information Security Policy demonstrates rejection and resubmission:
@@ -62,6 +67,18 @@ DRAFT
 Approved and archived documents likewise contain their submitted, approved
 and archived audit events. Startup events have no HTTP request correlation ID,
 so their `correlationId` is `null`.
+
+Three documents contain small, synthetic UTF-8 text attachments:
+
+| Document | Attachment |
+|---|---|
+| Ata de Revisão do MVP | `ata-revisao-mvp.txt` |
+| Certificado de Treinamento | `certificado-treinamento.txt` |
+| Contrato de Prestação de Serviço | `contrato-prestacao-servico.txt` |
+
+These resources contain no real personal, corporate or secret information.
+They are uploaded through the production application service and file
+validator, not inserted directly into storage or the database.
 
 ## Running
 
@@ -90,14 +107,16 @@ real `.env` file.
 ## Idempotency
 
 Users are identified by their deterministic email addresses. Documents are
-identified by creator and title. On restart, existing seed records are reused
-and their workflow is not replayed, so users, documents and audit events are
-not duplicated.
+identified by creator and title, and attachments by document and original
+filename. On restart, existing seed records are reused and their workflow is
+not replayed, so users, documents, attachments and audit events are not
+duplicated.
 
 Missing canonical records can be created without requiring the database to be
 globally empty. The initialization runs inside one transaction; a failure
-rolls back newly created users, documents, workflow transitions and audit
-events together.
+rolls back newly created users, documents, workflow transitions, attachment
+metadata and audit events together. Stored files created during a transaction
+are removed by rollback compensation.
 
 ## Testing
 

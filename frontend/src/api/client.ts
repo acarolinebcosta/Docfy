@@ -7,7 +7,7 @@ interface ApiErrorBody {
   correlationId?: string;
 }
 
-interface ApiRequestOptions extends RequestInit {
+export interface ApiRequestOptions extends RequestInit {
   accessToken?: string;
 }
 
@@ -32,6 +32,28 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
+  const response = await executeRequest(path, options);
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
+}
+
+export async function apiBlobRequest(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<Blob> {
+  const response = await executeRequest(path, options);
+
+  return response.blob();
+}
+
+async function executeRequest(
+  path: string,
+  options: ApiRequestOptions,
+): Promise<Response> {
   const {
     accessToken,
     headers: providedHeaders,
@@ -82,9 +104,5 @@ export async function apiRequest<T>(
     );
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
+  return response;
 }

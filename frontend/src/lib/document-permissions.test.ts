@@ -29,9 +29,14 @@ function document(
 ): Document {
   return {
     id: "document-id",
+    documentCode: "DOC-000001",
     title: "Document",
     description: null,
     status,
+    category: {
+      id: "11111111-0000-0000-0000-000000000007",
+      name: "Other",
+    },
     createdBy,
     createdAt: "2026-08-30T12:00:00Z",
     updatedAt: "2026-08-30T12:00:00Z",

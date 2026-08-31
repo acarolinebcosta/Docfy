@@ -129,12 +129,26 @@ The first version of Docfy will include:
 ### File Management
 
 * upload document files;
+* list file metadata for visible documents;
+* download files from visible documents;
 * validate allowed file types;
-* validate maximum file size.
+* validate maximum file size;
+* keep binary content outside PostgreSQL.
+
+Uploads use the same edit authorization as document metadata: files may be
+attached only to an editable `DRAFT`. `ADMIN` and `MANAGER` can upload to any
+draft, while `COLLABORATOR` can upload only to a draft they created. Listing
+and download use the document visibility policy and preserve safe `404`
+resource concealment.
+
+The initial supported formats are PDF, UTF-8 text, PNG and JPEG. The backend
+validates extension, declared content type and the supported signature/content
+shape. Empty files and files over the configurable limit are rejected.
 
 ### Categories
 
-Documents can be classified using predefined categories such as:
+Every document must reference one persisted category. The initial reference
+data is:
 
 * Meeting Minutes;
 * Certificate;
@@ -143,6 +157,13 @@ Documents can be classified using predefined categories such as:
 * Regulation;
 * Official Letter;
 * Other.
+
+Categories are listed through an authenticated read-only API. This MVP does
+not provide administrative category CRUD.
+
+Category is mutable only while the document is in `DRAFT`, through the same
+metadata update operation and edit authorization policy used for title and
+description.
 
 ### Document Workflow
 
@@ -187,6 +208,14 @@ Users will be able to search and filter documents by:
 * category;
 * status.
 
+Text search matches title or human-readable document code without regard to
+letter case. Category and status are independent filters. When criteria are
+combined, text search, category and status are joined with `AND`; within the
+text criterion, title and document code are joined with `OR`.
+
+All search and filter criteria apply only to documents visible to the
+authenticated user and are evaluated before pagination.
+
 ---
 
 ## 7. Out of Scope — MVP
@@ -225,7 +254,9 @@ Documents may be edited only while they are in `DRAFT` status.
 
 `COLLABORATOR` users may edit only draft documents they created.
 
-The metadata update operation must support partial modification of title and description without allowing clients to modify lifecycle status, ownership or system-managed metadata.
+The metadata update operation must support partial modification of title,
+description and category without allowing clients to modify lifecycle status,
+ownership or system-managed metadata.
 
 ### FR-004 — Document Submission
 
@@ -257,7 +288,8 @@ Users must be able to filter documents by category and status.
 
 ### FR-011 — File Upload
 
-Users must be able to upload supported files to a document.
+Users must be able to upload supported files to an editable draft, list file
+metadata and download files belonging to documents they can view.
 
 ### FR-012 — Audit History
 
@@ -296,7 +328,9 @@ When the requested document is not visible to the authenticated user, audit hist
 
 ### BR-001 — Unique Document Code
 
-Every document must have a unique identifier.
+Every document has both a technical UUID and a unique, immutable human-readable code generated exclusively by the backend in the format `DOC-000001`.
+
+Document code allocation uses a database sequence. It must remain safe under concurrent creation and must not derive the next value from `MAX(code)`.
 
 ### BR-002 — Required Information
 
@@ -305,6 +339,8 @@ A document must contain at least:
 * title;
 * category;
 * responsible user.
+
+The category must reference the persisted category catalog.
 
 ### BR-003 — Approval Permission
 
@@ -409,6 +445,17 @@ For metadata updates:
 
 This distinction protects against document enumeration while preserving explicit authorization semantics for resources already visible to the user.
 
+### BR-011 — Document Files
+
+File upload follows `DocumentEditPolicy`; file listing and download follow
+`DocumentVisibilityPolicy`. Missing or concealed documents and attachments
+produce the same public `404 Not Found` contract.
+
+The original filename is metadata only. Storage uses a backend-generated,
+collision-resistant key and must never derive a physical path directly from a
+client-provided filename. PostgreSQL stores metadata while binary content is
+stored through the configured `FileStorage` implementation.
+
 ---
 
 
@@ -425,9 +472,10 @@ Create document
   ↓
 Enter metadata
   ↓
-Upload file
-  ↓
 Save as draft
+Save as draft
+  ↓
+Upload file (optional)
 ```
 
 ### Document Approval

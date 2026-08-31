@@ -36,6 +36,14 @@ function useDocumentAndAudit(
     http.get("*/api/v1/documents/:id/audit", () =>
       HttpResponse.json(events),
     ),
+    http.get("*/api/v1/categories", () =>
+      HttpResponse.json([
+        {
+          id: "11111111-0000-0000-0000-000000000007",
+          name: "Other",
+        },
+      ]),
+    ),
   );
 }
 

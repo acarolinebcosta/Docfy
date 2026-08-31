@@ -4,6 +4,9 @@ import io.github.acarolinebcosta.docfy.audit.application.DocumentAuditQueryServi
 import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
 import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.auth.domain.UserRepository;
+import io.github.acarolinebcosta.docfy.shared.openapi.OpenApiConfig;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +19,8 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/documents")
+@Tag(name = "Document audit")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class DocumentAuditController {
 
     private final DocumentAuditQueryService auditQueryService;

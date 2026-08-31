@@ -1,0 +1,11 @@
+DOCFY — ATA DE REVISAO DO MVP
+
+Data: 30 de agosto de 2026
+Participantes: equipe ficticia Docfy
+
+Pauta:
+- validar o fluxo documental do MVP;
+- revisar evidencias de qualidade;
+- registrar decisoes para a demonstracao.
+
+Resultado: escopo funcional aprovado para validacao interna.

@@ -1,12 +1,14 @@
 import { ArrowLeft, FilePlus2 } from "lucide-react";
 import {
+  useCallback,
+  useEffect,
   useState,
   type FormEvent,
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "@/api/client";
-import { createDocument } from "@/api/documents";
+import { createDocument, listCategories } from "@/api/documents";
 import { useAuth } from "@/auth/useAuth";
 import { AppShell } from "@/components/app-shell";
 import { PageHeader } from "@/components/page-header";
@@ -14,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import type { Category } from "@/types/document";
 
 interface FormError {
   message: string;
@@ -26,8 +29,61 @@ export function CreateDocumentPage() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [categoriesError, setCategoriesError] =
+    useState<FormError | null>(null);
+  const [categoriesReloadKey, setCategoriesReloadKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<FormError | null>(null);
+
+  const retryCategories = useCallback(() => {
+    setCategoriesReloadKey((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    const token = accessToken;
+
+    if (!token) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadAvailableCategories(authToken: string) {
+      setCategoriesError(null);
+
+      try {
+        setCategories(
+          await listCategories({
+            accessToken: authToken,
+            signal: controller.signal,
+          }),
+        );
+      } catch (caughtError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (caughtError instanceof ApiError && caughtError.status === 401) {
+          logout();
+          return;
+        }
+
+        setCategoriesError({
+          message: "Não foi possível carregar as categorias.",
+          correlationId:
+            caughtError instanceof ApiError
+              ? caughtError.correlationId
+              : undefined,
+        });
+      }
+    }
+
+    void loadAvailableCategories(token);
+
+    return () => controller.abort();
+  }, [accessToken, categoriesReloadKey, logout]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,6 +102,11 @@ export function CreateDocumentPage() {
       return;
     }
 
+    if (!categoryId) {
+      setError({ message: "Selecione uma categoria." });
+      return;
+    }
+
     if (!accessToken) {
       logout();
       return;
@@ -60,6 +121,7 @@ export function CreateDocumentPage() {
         document: {
           title: normalizedTitle,
           description: description.trim() || null,
+          categoryId,
         },
       });
 
@@ -142,6 +204,53 @@ export function CreateDocumentPage() {
               {title.length}/255 caracteres
             </p>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="document-category">Categoria</Label>
+            <select
+              id="document-category"
+              name="categoryId"
+              required
+              value={categoryId}
+              onChange={(event) => setCategoryId(event.target.value)}
+              disabled={!categories || Boolean(categoriesError)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">
+                {categories ? "Selecione" : "Carregando categorias..."}
+              </option>
+              {categories?.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {categoriesError ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+            >
+              <p className="text-sm text-destructive">
+                {categoriesError.message}
+              </p>
+              {categoriesError.correlationId ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Código de rastreio: {categoriesError.correlationId}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={retryCategories}
+              >
+                Tentar novamente
+              </Button>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor="document-description">
