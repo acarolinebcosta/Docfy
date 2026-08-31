@@ -2,10 +2,12 @@ package io.github.acarolinebcosta.docfy.shared.error;
 
 import io.github.acarolinebcosta.docfy.audit.application.DocumentAuditForbiddenException;
 import io.github.acarolinebcosta.docfy.auth.application.AuthenticationException;
+import io.github.acarolinebcosta.docfy.category.application.CategoryNotFoundException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentEditForbiddenException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentNotFoundException;
 import io.github.acarolinebcosta.docfy.document.application.DocumentWorkflowForbiddenException;
 import io.github.acarolinebcosta.docfy.document.domain.InvalidDocumentStatusTransitionException;
+import io.github.acarolinebcosta.docfy.file.application.DocumentFileNotFoundException;
 import io.github.acarolinebcosta.docfy.shared.error.exception.BadRequestException;
 import io.github.acarolinebcosta.docfy.shared.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +22,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.Instant;
 
@@ -28,6 +31,27 @@ public class GlobalExceptionHandler {
 
     private static final Logger LOGGER =
             LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(CategoryNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleCategoryNotFoundException(
+            CategoryNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Category not found. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.BAD_REQUEST,
+                "Category not found",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
 
     @ExceptionHandler(DocumentEditForbiddenException.class)
     public ResponseEntity<ApiErrorResponse> handleDocumentEditForbiddenException(
@@ -233,6 +257,27 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMaximumUploadSize(
+            MaxUploadSizeExceededException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Multipart request exceeded configured limit. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.BAD_REQUEST,
+                "File exceeds the maximum allowed size",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
     @ExceptionHandler(DocumentNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleDocumentNotFoundException(
             DocumentNotFoundException exception,
@@ -249,6 +294,27 @@ public class GlobalExceptionHandler {
         return buildResponseEntity(
                 HttpStatus.NOT_FOUND,
                 "Document not found",
+                request.getRequestURI(),
+                correlationId
+        );
+    }
+
+    @ExceptionHandler(DocumentFileNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleDocumentFileNotFoundException(
+            DocumentFileNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        String correlationId = getCorrelationId();
+
+        LOGGER.warn(
+                "Document file not found. correlationId={}, path={}",
+                correlationId,
+                request.getRequestURI()
+        );
+
+        return buildResponseEntity(
+                HttpStatus.NOT_FOUND,
+                "File not found",
                 request.getRequestURI(),
                 correlationId
         );

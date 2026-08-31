@@ -3,6 +3,8 @@ package io.github.acarolinebcosta.docfy.document.api;
 import io.github.acarolinebcosta.docfy.auth.domain.Role;
 import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.auth.domain.UserRepository;
+import io.github.acarolinebcosta.docfy.category.domain.Category;
+import io.github.acarolinebcosta.docfy.category.domain.CategoryRepository;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentRepository;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentStatus;
@@ -46,6 +48,9 @@ class DocumentListingIntegrationTest
     private static final int DEFAULT_SIZE = 20;
     private static final Instant TEST_UPDATED_AT =
             Instant.parse("2100-01-01T00:00:00Z");
+    private static final UUID CONTRACT_CATEGORY_ID = UUID.fromString(
+            "11111111-0000-0000-0000-000000000003"
+    );
 
     @Autowired
     private MockMvc mockMvc;
@@ -55,6 +60,9 @@ class DocumentListingIntegrationTest
 
     @Autowired
     private DocumentRepository documentRepository;
+
+    @Autowired
+    private CategoryRepository categoryRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -424,6 +432,215 @@ class DocumentListingIntegrationTest
     }
 
     @Test
+    void shouldSearchByTitleCaseInsensitively() throws Exception {
+        User viewer = createUser("listing-title-search", Role.ADMIN);
+        String searchTerm = "Quality-" + UUID.randomUUID();
+        Document expected = createDocument(
+                "Policy " + searchTerm,
+                viewer,
+                DocumentStatus.DRAFT,
+                TEST_UPDATED_AT
+        );
+        createDocument(
+                uniqueTitle("Unrelated title"),
+                viewer,
+                DocumentStatus.DRAFT,
+                TEST_UPDATED_AT.minusSeconds(1)
+        );
+
+        mockMvc.perform(
+                        listRequest(viewer)
+                                .param(
+                                        "search",
+                                        "  " + searchTerm.toLowerCase() + "  "
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(
+                        jsonPath("$.items[0].id")
+                                .value(expected.getId().toString())
+                );
+    }
+
+    @Test
+    void shouldSearchByDocumentCode() throws Exception {
+        User viewer = createUser("listing-code-search", Role.ADMIN);
+        Document expected = createDocument(
+                uniqueTitle("Code search"),
+                viewer,
+                DocumentStatus.DRAFT,
+                TEST_UPDATED_AT
+        );
+
+        mockMvc.perform(
+                        listRequest(viewer)
+                                .param(
+                                        "search",
+                                        expected.getDocumentCode().toLowerCase()
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(
+                        jsonPath("$.items[0].documentCode")
+                                .value(expected.getDocumentCode())
+                );
+    }
+
+    @Test
+    void shouldCombineSearchCategoryAndStatusFilters()
+            throws Exception {
+        User viewer = createUser("listing-combined", Role.ADMIN);
+        Category contract = categoryRepository
+                .findById(CONTRACT_CATEGORY_ID)
+                .orElseThrow();
+        String searchTerm = uniqueTitle("Combined filters");
+        Document expected = createDocument(
+                searchTerm + " expected",
+                viewer,
+                DocumentStatus.APPROVED,
+                TEST_UPDATED_AT,
+                contract
+        );
+        createDocument(
+                searchTerm + " wrong status",
+                viewer,
+                DocumentStatus.DRAFT,
+                TEST_UPDATED_AT.minusSeconds(1),
+                contract
+        );
+        createDocument(
+                searchTerm + " wrong category",
+                viewer,
+                DocumentStatus.APPROVED,
+                TEST_UPDATED_AT.minusSeconds(2)
+        );
+
+        mockMvc.perform(
+                        listRequest(viewer)
+                                .param("search", searchTerm)
+                                .param(
+                                        "categoryId",
+                                        CONTRACT_CATEGORY_ID.toString()
+                                )
+                                .param("status", "APPROVED")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(
+                        jsonPath("$.items[0].id")
+                                .value(expected.getId().toString())
+                );
+    }
+
+    @Test
+    void shouldPaginateAfterApplyingSearchFilters() throws Exception {
+        User viewer = createUser("listing-filter-page", Role.ADMIN);
+        String searchTerm = uniqueTitle("Filtered page");
+
+        for (int index = 1; index <= 3; index++) {
+            createDocument(
+                    searchTerm + " " + index,
+                    viewer,
+                    DocumentStatus.DRAFT,
+                    TEST_UPDATED_AT.plusSeconds(index)
+            );
+        }
+
+        createDocument(
+                uniqueTitle("Outside filter"),
+                viewer,
+                DocumentStatus.DRAFT,
+                TEST_UPDATED_AT.plusSeconds(10)
+        );
+
+        mockMvc.perform(
+                        listRequest(viewer)
+                                .param("search", searchTerm)
+                                .param("page", "1")
+                                .param("size", "2")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.items.length()").value(1));
+    }
+
+    @Test
+    void shouldNotDiscloseConcealedDocumentsThroughSearch()
+            throws Exception {
+        User viewer = createUser(
+                "listing-search-viewer",
+                Role.COLLABORATOR
+        );
+        User other = createUser(
+                "listing-search-other",
+                Role.COLLABORATOR
+        );
+        String searchTerm = uniqueTitle("Protected search");
+        Document visible = createDocument(
+                searchTerm + " approved",
+                other,
+                DocumentStatus.APPROVED,
+                TEST_UPDATED_AT
+        );
+        createDocument(
+                searchTerm + " private",
+                other,
+                DocumentStatus.DRAFT,
+                TEST_UPDATED_AT.plusSeconds(1)
+        );
+
+        mockMvc.perform(
+                        listRequest(viewer)
+                                .param("search", searchTerm)
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(
+                        jsonPath("$.items[0].id")
+                                .value(visible.getId().toString())
+                );
+    }
+
+    @Test
+    void shouldRejectInvalidStatusFilter() throws Exception {
+        User viewer = createUser("listing-invalid-status", Role.ADMIN);
+
+        mockMvc.perform(
+                        listRequest(viewer)
+                                .param("status", "REJECTED")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(
+                        jsonPath("$.message")
+                                .value("Invalid document status filter")
+                );
+    }
+
+    @Test
+    void shouldRejectMalformedCategoryFilter() throws Exception {
+        User viewer = createUser("listing-invalid-category", Role.ADMIN);
+
+        mockMvc.perform(
+                        listRequest(viewer)
+                                .param("categoryId", "not-a-uuid")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(
+                        jsonPath("$.message")
+                                .value(
+                                        "Category filter must be a valid UUID"
+                                )
+                );
+    }
+
+    @Test
     void shouldRejectNegativePage() throws Exception {
         User viewer = createUser(
                 "listing-invalid-page",
@@ -507,6 +724,22 @@ class DocumentListingIntegrationTest
             DocumentStatus status,
             Instant updatedAt
     ) {
+        return createDocument(
+                title,
+                creator,
+                status,
+                updatedAt,
+                Category.otherReference()
+        );
+    }
+
+    private Document createDocument(
+            String title,
+            User creator,
+            DocumentStatus status,
+            Instant updatedAt,
+            Category category
+    ) {
         User managedCreator = userRepository
                 .findById(creator.getId())
                 .orElseThrow();
@@ -514,7 +747,8 @@ class DocumentListingIntegrationTest
                 new Document(
                         title,
                         "Document listing integration test",
-                        managedCreator
+                        managedCreator,
+                        category
                 )
         );
 

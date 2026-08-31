@@ -32,6 +32,9 @@ target/
 build/
 *.class
 
+# Local document storage
+/backend/data/
+
 # Python
 __pycache__/
 *.py[cod]

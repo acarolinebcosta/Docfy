@@ -9,6 +9,9 @@ import io.github.acarolinebcosta.docfy.auth.domain.UserRepository;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentRepository;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentStatus;
+import io.github.acarolinebcosta.docfy.file.domain.DocumentFile;
+import io.github.acarolinebcosta.docfy.file.domain.DocumentFileRepository;
+import io.github.acarolinebcosta.docfy.file.storage.FileStorage;
 import io.github.acarolinebcosta.docfy.support.PostgresTestContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -30,7 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(
-        properties = "DOCFY_DEV_SEED_PASSWORD=development-seed-test-password"
+        properties = {
+                "DOCFY_DEV_SEED_PASSWORD=development-seed-test-password",
+                "docfy.files.storage-location=${java.io.tmpdir}/docfy-development-seed-test"
+        }
 )
 @ActiveProfiles("dev")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -52,44 +58,88 @@ class DevelopmentDataSeederIntegrationTest
                     new ExpectedDocument(
                             "ana@docfy.local",
                             "Quality Policy",
+                            "Regulation",
                             DocumentStatus.DRAFT
                     ),
                     new ExpectedDocument(
                             "ana@docfy.local",
                             "Information Security Policy",
+                            "Regulation",
                             DocumentStatus.IN_REVIEW
                     ),
                     new ExpectedDocument(
                             "ana@docfy.local",
                             "Software Release Checklist",
+                            "Other",
                             DocumentStatus.APPROVED
                     ),
                     new ExpectedDocument(
                             "ana@docfy.local",
                             "Operational Procedure",
+                            "Other",
                             DocumentStatus.ARCHIVED
                     ),
                     new ExpectedDocument(
                             "joao@docfy.local",
                             "Architecture Guidelines",
+                            "Other",
                             DocumentStatus.DRAFT
                     ),
                     new ExpectedDocument(
                             "joao@docfy.local",
                             "Incident Response Procedure",
+                            "Notice",
                             DocumentStatus.IN_REVIEW
                     ),
                     new ExpectedDocument(
                             "joao@docfy.local",
                             "Supplier Agreement",
+                            "Contract",
                             DocumentStatus.APPROVED
                     ),
                     new ExpectedDocument(
                             "joao@docfy.local",
                             "Meeting Minutes",
+                            "Meeting Minutes",
                             DocumentStatus.ARCHIVED
+                    ),
+                    new ExpectedDocument(
+                            "ana@docfy.local",
+                            "Ata de Revisão do MVP",
+                            "Meeting Minutes",
+                            DocumentStatus.APPROVED
+                    ),
+                    new ExpectedDocument(
+                            "ana@docfy.local",
+                            "Certificado de Treinamento",
+                            "Certificate",
+                            DocumentStatus.DRAFT
+                    ),
+                    new ExpectedDocument(
+                            "joao@docfy.local",
+                            "Comunicado de Manutenção",
+                            "Notice",
+                            DocumentStatus.IN_REVIEW
+                    ),
+                    new ExpectedDocument(
+                            "joao@docfy.local",
+                            "Contrato de Prestação de Serviço",
+                            "Contract",
+                            DocumentStatus.DRAFT
+                    ),
+                    new ExpectedDocument(
+                            "joao@docfy.local",
+                            "Ofício de Governança",
+                            "Official Letter",
+                            DocumentStatus.APPROVED
                     )
             );
+
+    private static final Map<String, String> EXPECTED_ATTACHMENTS = Map.of(
+            "Ata de Revisão do MVP", "ata-revisao-mvp.txt",
+            "Certificado de Treinamento", "certificado-treinamento.txt",
+            "Contrato de Prestação de Serviço", "contrato-prestacao-servico.txt"
+    );
 
     @Autowired
     private ApplicationContext applicationContext;
@@ -105,6 +155,12 @@ class DevelopmentDataSeederIntegrationTest
 
     @Autowired
     private DocumentAuditEventRepository auditEventRepository;
+
+    @Autowired
+    private DocumentFileRepository fileRepository;
+
+    @Autowired
+    private FileStorage fileStorage;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -155,6 +211,13 @@ class DevelopmentDataSeederIntegrationTest
 
             assertEquals(expected.title(), document.getTitle());
             assertEquals(expected.status(), document.getStatus());
+            assertEquals(
+                    expected.categoryName(),
+                    document.getCategory().getName()
+            );
+            assertTrue(
+                    document.getDocumentCode().matches("DOC-\\d{6,}")
+            );
 
             assertEquals(
                     owner.getId(),
@@ -162,7 +225,7 @@ class DevelopmentDataSeederIntegrationTest
             );
         }
 
-        assertEquals(8, seedDocumentCount());
+        assertEquals(13, seedDocumentCount());
     }
 
     @Test
@@ -214,6 +277,54 @@ class DevelopmentDataSeederIntegrationTest
                 approvedByManager(),
                 archivedByManager()
         );
+
+        assertHistory(
+                "Ata de Revisão do MVP",
+                submittedBy("ana@docfy.local"),
+                approvedByManager()
+        );
+
+        assertHistory("Certificado de Treinamento");
+
+        assertHistory(
+                "Comunicado de Manutenção",
+                submittedBy("joao@docfy.local")
+        );
+
+        assertHistory("Contrato de Prestação de Serviço");
+
+        assertHistory(
+                "Ofício de Governança",
+                submittedBy("joao@docfy.local"),
+                approvedByManager()
+        );
+    }
+
+    @Test
+    @Transactional(readOnly = true)
+    void shouldCreateSmallValidDemoAttachments() {
+        EXPECTED_ATTACHMENTS.forEach((title, filename) -> {
+            Document document = seedDocument(title);
+            List<DocumentFile> files = fileRepository
+                    .findByDocumentIdOrderByUploadedAtAscIdAsc(
+                            document.getId()
+                    );
+
+            assertEquals(1, files.size());
+
+            DocumentFile file = files.getFirst();
+            assertEquals(filename, file.getOriginalFilename());
+            assertEquals("text/plain", file.getContentType());
+            assertTrue(file.getSize() > 0);
+            assertTrue(
+                    new String(
+                            fileStorage.load(file.getStorageKey()),
+                            java.nio.charset.StandardCharsets.UTF_8
+                    ).contains("DOCFY")
+            );
+        });
+
+        assertEquals(3, seedFileCount());
     }
 
     @Test
@@ -224,12 +335,26 @@ class DevelopmentDataSeederIntegrationTest
         assertFalse(seedService.initialize(SEED_PASSWORD));
 
         assertEquals(before, seedCounts());
-        assertEquals(new SeedCounts(4, 8, 14), before);
+        assertEquals(new SeedCounts(4, 13, 19, 3), before);
     }
 
     @AfterAll
     void cleanUpSeedData() {
         List<Document> documents = seedDocuments();
+
+        for (Document document : documents) {
+            List<DocumentFile> files = fileRepository
+                    .findByDocumentIdOrderByUploadedAtAscIdAsc(
+                            document.getId()
+                    );
+
+            files.forEach(file ->
+                    fileStorage.delete(file.getStorageKey())
+            );
+            fileRepository.deleteAll(files);
+        }
+
+        fileRepository.flush();
 
         for (Document document : documents) {
             List<DocumentAuditEvent> events =
@@ -320,6 +445,18 @@ class DevelopmentDataSeederIntegrationTest
                 .sum();
     }
 
+    private long seedFileCount() {
+        return seedDocuments().stream()
+                .mapToLong(document ->
+                        fileRepository
+                                .findByDocumentIdOrderByUploadedAtAscIdAsc(
+                                        document.getId()
+                                )
+                                .size()
+                )
+                .sum();
+    }
+
     private SeedCounts seedCounts() {
         long users = EXPECTED_USERS.keySet().stream()
                 .filter(email ->
@@ -330,7 +467,8 @@ class DevelopmentDataSeederIntegrationTest
         return new SeedCounts(
                 users,
                 seedDocumentCount(),
-                seedAuditEventCount()
+                seedAuditEventCount(),
+                seedFileCount()
         );
     }
 
@@ -420,6 +558,7 @@ class DevelopmentDataSeederIntegrationTest
     private record ExpectedDocument(
             String ownerEmail,
             String title,
+            String categoryName,
             DocumentStatus status
     ) {
     }
@@ -435,7 +574,8 @@ class DevelopmentDataSeederIntegrationTest
     private record SeedCounts(
             long users,
             long documents,
-            long auditEvents
+            long auditEvents,
+            long files
     ) {
     }
 }

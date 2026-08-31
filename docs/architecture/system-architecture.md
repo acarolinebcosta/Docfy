@@ -1,7 +1,7 @@
 # Docfy — System Architecture
 
-**Version:** 0.1  
-**Status:** Draft  
+**Version:** 0.1
+**Status:** Draft
 **Scope:** MVP
 
 **Related documents:**
@@ -336,11 +336,15 @@ POST  /api/v1/documents
 GET   /api/v1/documents
 GET   /api/v1/documents/{id}
 PATCH /api/v1/documents/{id}
+GET   /api/v1/categories
 POST  /api/v1/documents/{id}/submit
 POST  /api/v1/documents/{id}/approve
 POST  /api/v1/documents/{id}/reject
 POST  /api/v1/documents/{id}/archive
 GET   /api/v1/documents/{id}/audit
+POST  /api/v1/documents/{id}/files
+GET   /api/v1/documents/{id}/files
+GET   /api/v1/documents/{id}/files/{fileId}
 ```
 
 The final API structure may evolve during implementation.
@@ -361,9 +365,11 @@ This provides room for future contract evolution without silently breaking clien
 
 ## 13. OpenAPI Contract
 
-The backend should expose an OpenAPI specification.
+The backend exposes an OpenAPI specification at `/v3/api-docs` and Swagger UI
+at `/swagger-ui.html`. Both documentation entry points are public; this does
+not change the JWT and document-authorization rules of `/api/v1` operations.
 
-The contract should document:
+The generated contract documents:
 
 - endpoints;
 - request schemas;
@@ -521,6 +527,56 @@ Results are ordered by `updatedAt DESC` and then `id ASC`.
 
 The identifier is the deterministic tie-breaker required for stable navigation between pages.
 
+The same endpoint accepts optional search and filter parameters:
+
+```text
+GET /api/v1/documents?search=policy&categoryId={uuid}&status=APPROVED&page=0&size=20
+```
+
+- `search` is trimmed, case-insensitive and matches `title` OR
+  `documentCode`;
+- `categoryId` matches the persisted category UUID;
+- `status` accepts only `DRAFT`, `IN_REVIEW`, `APPROVED` or `ARCHIVED`;
+- multiple criteria are combined with `AND`;
+- blank search is equivalent to no text criterion;
+- malformed category identifiers and invalid statuses return structured
+  `400 Bad Request` responses.
+
+Visibility and all supplied criteria are expressed in the database query
+before pagination. Consequently, `totalElements` and `totalPages` describe
+only matching documents visible to the authenticated user, and filters cannot
+be used to infer concealed documents.
+
+### Document identifiers
+
+Documents retain UUID as their technical identifier for API routes and relationships. A separate immutable `documentCode` provides a human-readable identifier using the `DOC-000001` format.
+
+The backend and PostgreSQL are the only code authorities. PostgreSQL allocates numbers through a dedicated sequence, which provides concurrency-safe uniqueness without querying `MAX(code)`. Existing rows receive a deterministic backfill ordered by creation timestamp and UUID, and a unique database constraint protects the public code.
+
+### Document categories
+
+Categories are persisted reference data and are not free-form document text.
+Each document has a mandatory foreign key to one of the initial categories:
+
+- `Meeting Minutes`;
+- `Certificate`;
+- `Contract`;
+- `Notice`;
+- `Regulation`;
+- `Official Letter`;
+- `Other`.
+
+`GET /api/v1/categories` exposes the authenticated, read-only catalog in
+alphabetical order. The MVP does not expose category administration.
+
+Document creation requires `categoryId`. Metadata PATCH may change
+`categoryId` only while the document is editable under the existing
+`DocumentEditPolicy`; unknown references and explicit null category updates
+are rejected with `400 Bad Request`.
+
+Document queries load creator and category metadata together so response
+mapping does not introduce an N+1 query pattern.
+
 ### Document edit policy
 
 Document editing is evaluated independently from document visibility.
@@ -546,7 +602,8 @@ This distinction prevents document enumeration while preserving an explicit auth
 `PATCH /api/v1/documents/{id}` currently allows partial updates to:
 
 - `title`;
-- `description`.
+- `description`;
+- `categoryId`.
 
 The following fields cannot be modified through this operation:
 
@@ -898,9 +955,11 @@ DOC-000002
 DOC-000003
 ```
 
-The exact strategy will be defined during implementation.
-
-Uniqueness must be enforced at the database level.
+The UUID remains the technical API identifier. The immutable human-readable
+code is allocated exclusively by the backend from a PostgreSQL sequence and
+formatted as `DOC-000001`. Existing V4 data is backfilled deterministically by
+`created_at` and UUID. A database `UNIQUE` constraint provides an additional
+integrity boundary, and allocation never uses `MAX(code) + 1`.
 
 This reduces:
 
@@ -912,7 +971,7 @@ RISK-006 — Duplicate document identifiers
 
 ## 25. File Storage
 
-Document metadata and binary document files should remain logically separated.
+Document metadata and binary document files are logically separated.
 
 PostgreSQL should store file metadata such as:
 
@@ -923,9 +982,38 @@ PostgreSQL should store file metadata such as:
 - upload timestamp;
 - responsible user.
 
-Binary storage may initially use local or container-backed storage for development.
+Migration V7 creates `document_files` with document and uploader foreign keys,
+a unique storage key, positive size constraint and deterministic list index.
+Binary content is not stored in PostgreSQL.
 
-The storage abstraction should allow future migration to external object storage without changing the core document domain.
+The initial `LocalFileStorage` writes binary content below the externally
+configurable `DOCFY_FILE_STORAGE_PATH` (default `./data/files`). It normalizes
+every generated storage key against the configured root and uses create-new
+semantics to prevent traversal and accidental overwrite. Storage keys contain
+a random UUID and a validated extension; the original filename is retained as
+metadata only.
+
+The `FileStorage` abstraction allows a future external object-storage adapter
+without changing the document use case.
+
+The API exposes:
+
+- `POST /api/v1/documents/{documentId}/files` (`multipart/form-data`);
+- `GET /api/v1/documents/{documentId}/files`;
+- `GET /api/v1/documents/{documentId}/files/{fileId}`.
+
+Upload delegates authorization to the existing draft edit policy. Listing and
+download delegate to the document visibility policy, including safe `404`
+concealment. Downloads return the validated content type and a UTF-8-safe
+attachment disposition using the original filename.
+
+Filesystem and PostgreSQL cannot participate in one ACID transaction. The
+service writes storage first, persists metadata in the surrounding transaction
+and registers rollback compensation. If storage fails, metadata is never
+written. If persistence or the transaction fails after storage, the stored
+object is removed. A failed compensation is logged without sensitive content
+for operational cleanup; this residual infrastructure failure is observable
+but cannot be made atomic with local filesystem storage.
 
 ---
 
@@ -933,14 +1021,20 @@ The storage abstraction should allow future migration to external object storage
 
 File validation must occur on the backend.
 
-Validation should include:
+The backend currently validates:
 
-- allowed formats;
-- declared content type;
-- actual content type where feasible;
-- maximum file size;
+- allowed extensions: `.pdf`, `.txt`, `.png`, `.jpg` and `.jpeg`;
+- declared content type matching the extension;
+- PDF, PNG and JPEG magic-byte prefixes;
+- UTF-8 decodability and absence of NUL bytes for text;
+- configurable maximum file size (default 10 MB);
 - empty files;
-- malformed uploads.
+- invalid/control-character filenames.
+
+This is targeted signature/content validation for the supported formats; it is
+not antivirus scanning or a general-purpose MIME-detection engine. The
+container request limit defaults to 11 MB so the application can return its
+stable domain validation for the default 10 MB business limit.
 
 Client-side validation may improve UX but must not replace server-side validation.
 
@@ -1234,7 +1328,7 @@ DATABASE_URL
 DATABASE_USERNAME
 DATABASE_PASSWORD
 JWT_SECRET
-FILE_STORAGE_PATH
+DOCFY_FILE_STORAGE_PATH
 ```
 
 Sensitive values must never be committed to Git.

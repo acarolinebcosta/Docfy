@@ -87,7 +87,8 @@ class DocumentControllerIntegrationTest
                                 .content("""
                                         {
                                           "title": "Quality Strategy",
-                                          "description": "Document quality strategy"
+                                          "description": "Document quality strategy",
+                                          "categoryId": "11111111-0000-0000-0000-000000000007"
                                         }
                                         """)
                 )
@@ -103,6 +104,14 @@ class DocumentControllerIntegrationTest
                 .andExpect(
                         jsonPath("$.title")
                                 .value("Quality Strategy")
+                )
+                .andExpect(
+                        jsonPath("$.documentCode")
+                                .value(
+                                        org.hamcrest.Matchers.matchesPattern(
+                                                "DOC-\\d{6,}"
+                                        )
+                                )
                 )
                 .andExpect(
                         jsonPath("$.description")
@@ -165,7 +174,8 @@ class DocumentControllerIntegrationTest
                                 .content("""
                                         {
                                           "title": "   ",
-                                          "description": "Invalid"
+                                          "description": "Invalid",
+                                          "categoryId": "11111111-0000-0000-0000-000000000007"
                                         }
                                         """)
                 )
@@ -195,7 +205,8 @@ class DocumentControllerIntegrationTest
         String body = """
                 {
                   "title": "%s",
-                  "description": "Invalid"
+                  "description": "Invalid",
+                  "categoryId": "11111111-0000-0000-0000-000000000007"
                 }
                 """.formatted(longTitle);
 
@@ -227,7 +238,8 @@ class DocumentControllerIntegrationTest
                                 .content("""
                                         {
                                           "title": "Quality Strategy",
-                                          "description": "Document quality strategy"
+                                          "description": "Document quality strategy",
+                                          "categoryId": "11111111-0000-0000-0000-000000000007"
                                         }
                                         """)
                 )

@@ -30,6 +30,18 @@ function useDocumentResponse(
     http.get("*/api/v1/documents/:id/audit", () =>
       HttpResponse.json(auditResponse),
     ),
+    http.get("*/api/v1/categories", () =>
+      HttpResponse.json([
+        {
+          id: "11111111-0000-0000-0000-000000000007",
+          name: "Other",
+        },
+        {
+          id: "11111111-0000-0000-0000-000000000003",
+          name: "Contract",
+        },
+      ]),
+    ),
   );
 }
 
@@ -198,10 +210,12 @@ describe("DocumentDetailPage edit UX", () => {
         expect(
           screen.getByRole("button", { name: "Editar" }),
         ).toBeInTheDocument();
+        expect(screen.getByLabelText("Arquivo")).toBeInTheDocument();
       } else {
         expect(
           screen.queryByRole("button", { name: "Editar" }),
         ).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Arquivo")).not.toBeInTheDocument();
       }
     },
   );

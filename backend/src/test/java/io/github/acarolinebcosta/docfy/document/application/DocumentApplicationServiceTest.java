@@ -2,6 +2,8 @@ package io.github.acarolinebcosta.docfy.document.application;
 
 import io.github.acarolinebcosta.docfy.auth.domain.Role;
 import io.github.acarolinebcosta.docfy.auth.domain.User;
+import io.github.acarolinebcosta.docfy.category.domain.Category;
+import io.github.acarolinebcosta.docfy.category.domain.CategoryRepository;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentRepository;
 import io.github.acarolinebcosta.docfy.document.domain.DocumentStatus;
@@ -22,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,10 +35,13 @@ class DocumentApplicationServiceTest {
     void shouldCreateDraftDocument() {
         DocumentRepository repository =
                 mock(DocumentRepository.class);
+        CategoryRepository categoryRepository =
+                mock(CategoryRepository.class);
 
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        categoryRepository,
                         mock(DocumentVisibilityPolicy.class),
                         mock(DocumentEditPolicy.class)
                 );
@@ -46,13 +52,17 @@ class DocumentApplicationServiceTest {
                 Role.COLLABORATOR
         );
 
-        when(repository.save(any(Document.class)))
+        when(
+                categoryRepository.findById(Category.OTHER_CATEGORY_ID)
+        ).thenReturn(Optional.of(Category.otherReference()));
+        when(repository.saveAndFlush(any(Document.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         CreateDocumentCommand command =
                 new CreateDocumentCommand(
                         "Quality Strategy",
-                        "Document quality strategy"
+                        "Document quality strategy",
+                        Category.OTHER_CATEGORY_ID
                 );
 
         Document result = service.create(command, user);
@@ -65,7 +75,7 @@ class DocumentApplicationServiceTest {
         assertEquals(DocumentStatus.DRAFT, result.getStatus());
         assertEquals(user, result.getCreatedBy());
 
-        verify(repository).save(result);
+        verify(repository).saveAndFlush(result);
     }
 
     @Test
@@ -74,7 +84,8 @@ class DocumentApplicationServiceTest {
                 IllegalArgumentException.class,
                 () -> new CreateDocumentCommand(
                         "   ",
-                        "Description"
+                        "Description",
+                        Category.OTHER_CATEGORY_ID
                 )
         );
     }
@@ -87,7 +98,8 @@ class DocumentApplicationServiceTest {
                 IllegalArgumentException.class,
                 () -> new CreateDocumentCommand(
                         title,
-                        "Description"
+                        "Description",
+                        Category.OTHER_CATEGORY_ID
                 )
         );
     }
@@ -101,6 +113,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         mock(DocumentEditPolicy.class)
                 );
@@ -139,6 +152,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         mock(DocumentEditPolicy.class)
                 );
@@ -184,6 +198,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         mock(DocumentEditPolicy.class)
                 );
@@ -216,22 +231,44 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         mock(DocumentEditPolicy.class)
                 );
         User viewer = mockUser(Role.ADMIN);
+        UUID viewerId = viewer.getId();
         Page<Document> expected = new PageImpl<>(List.of());
         ArgumentCaptor<Pageable> pageableCaptor =
                 ArgumentCaptor.forClass(Pageable.class);
 
         when(visibilityPolicy.canViewAll(viewer)).thenReturn(true);
-        when(repository.findAll(any(Pageable.class)))
-                .thenReturn(expected);
+        when(repository.findVisibleByCriteria(
+                eq(true),
+                eq(viewerId),
+                eq(DocumentStatus.APPROVED),
+                isNull(),
+                isNull(),
+                isNull(),
+                any(Pageable.class)
+        )).thenReturn(expected);
 
-        Page<Document> result = service.listVisible(viewer, 2, 10);
+        Page<Document> result = service.listVisible(
+                viewer,
+                2,
+                10,
+                new DocumentListCriteria(null, null, null)
+        );
 
         assertEquals(expected, result);
-        verify(repository).findAll(pageableCaptor.capture());
+        verify(repository).findVisibleByCriteria(
+                eq(true),
+                eq(viewerId),
+                eq(DocumentStatus.APPROVED),
+                isNull(),
+                isNull(),
+                isNull(),
+                pageableCaptor.capture()
+        );
         assertPageable(pageableCaptor.getValue(), 2, 10);
     }
 
@@ -244,29 +281,44 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         mock(DocumentEditPolicy.class)
                 );
         User viewer = mockUser(Role.COLLABORATOR);
+        UUID viewerId = viewer.getId();
         Page<Document> expected = new PageImpl<>(List.of());
         ArgumentCaptor<Pageable> pageableCaptor =
                 ArgumentCaptor.forClass(Pageable.class);
 
         when(visibilityPolicy.canViewAll(viewer)).thenReturn(false);
         when(
-                repository.findByCreatedByIdOrStatus(
-                        eq(viewer.getId()),
+                repository.findVisibleByCriteria(
+                        eq(false),
+                        eq(viewerId),
                         eq(DocumentStatus.APPROVED),
+                        isNull(),
+                        isNull(),
+                        isNull(),
                         any(Pageable.class)
                 )
         ).thenReturn(expected);
 
-        Page<Document> result = service.listVisible(viewer, 0, 20);
+        Page<Document> result = service.listVisible(
+                viewer,
+                0,
+                20,
+                new DocumentListCriteria(null, null, null)
+        );
 
         assertEquals(expected, result);
-        verify(repository).findByCreatedByIdOrStatus(
-                eq(viewer.getId()),
+        verify(repository).findVisibleByCriteria(
+                eq(false),
+                eq(viewerId),
                 eq(DocumentStatus.APPROVED),
+                isNull(),
+                isNull(),
+                isNull(),
                 pageableCaptor.capture()
         );
         assertPageable(pageableCaptor.getValue(), 0, 20);
@@ -283,6 +335,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         editPolicy
                 );
@@ -340,6 +393,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         editPolicy
                 );
@@ -390,6 +444,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         editPolicy
                 );
@@ -446,6 +501,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         editPolicy
                 );
@@ -508,6 +564,7 @@ class DocumentApplicationServiceTest {
         DocumentApplicationService service =
                 new DocumentApplicationService(
                         repository,
+                        mock(CategoryRepository.class),
                         visibilityPolicy,
                         editPolicy
                 );

@@ -5,6 +5,9 @@ import io.github.acarolinebcosta.docfy.auth.domain.User;
 import io.github.acarolinebcosta.docfy.auth.domain.UserRepository;
 import io.github.acarolinebcosta.docfy.document.application.DocumentWorkflowService;
 import io.github.acarolinebcosta.docfy.document.domain.Document;
+import io.github.acarolinebcosta.docfy.shared.openapi.OpenApiConfig;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -17,6 +20,8 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/documents")
+@Tag(name = "Document workflow")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class DocumentWorkflowController {
 
     private final DocumentWorkflowService workflowService;
